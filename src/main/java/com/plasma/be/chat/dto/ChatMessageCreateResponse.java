@@ -6,7 +6,7 @@ public record ChatMessageCreateResponse(
         Long messageId,
         String sessionId,
         String role,
-        String content,
+        String inputText,
         LocalDateTime savedAt
 ) {
 }

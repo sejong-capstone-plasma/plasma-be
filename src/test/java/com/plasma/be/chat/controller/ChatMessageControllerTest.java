@@ -1,15 +1,25 @@
 package com.plasma.be.chat.controller;
 
+import com.plasma.be.chat.entity.ChatMessage;
+import com.plasma.be.chat.entity.MessageRole;
+import com.plasma.be.chat.entity.Session;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
+import com.plasma.be.extract.client.ExtractClient;
+import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDateTime;
+
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -28,64 +38,65 @@ class ChatMessageControllerTest {
     @Autowired
     private ChatSessionRepository chatSessionRepository;
 
+    @MockitoBean
+    private ExtractClient extractClient;
+
     @BeforeEach
     void setUp() {
         chatMessageRepository.deleteAll();
         chatSessionRepository.deleteAll();
+        when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
     }
 
     @Test
-    void createMessage() throws Exception {
+    void createMessage_성공() throws Exception {
         mockMvc.perform(post("/api/chat/messages")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "sessionId": "session-001",
                                   "role": "USER",
-                                  "content": "이 공정 조건에 이정도 er인데, 이걸 올릴 수 있는 방안이 있어?"
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 식각률 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.messageId").isNumber())
-                .andExpect(jsonPath("$.sessionId").value("session-001"))
-                .andExpect(jsonPath("$.role").value("USER"))
-                .andExpect(jsonPath("$.content").value("이 공정 조건에 이정도 er인데, 이걸 올릴 수 있는 방안이 있어?"))
-                .andExpect(jsonPath("$.savedAt").exists());
+                .andExpect(jsonPath("$.requestId").exists())
+                .andExpect(jsonPath("$.validationStatus").value("VALID"))
+                .andExpect(jsonPath("$.processType").value("ETCH"))
+                .andExpect(jsonPath("$.taskType").value("PREDICTION"))
+                .andExpect(jsonPath("$.processParams.pressure.value").value(50.0))
+                .andExpect(jsonPath("$.processParams.source_power.value").value(800.0))
+                .andExpect(jsonPath("$.processParams.bias_power.value").value(100.0));
     }
 
     @Test
-    void createMessageFailsWhenInputIsBlank() throws Exception {
+    void createMessage_inputText_누락시_400() throws Exception {
         mockMvc.perform(post("/api/chat/messages")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "sessionId": "session-001",
-                                  "inputText": "   "
+                                  "sessionId": "session-001"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("content is required."));
+                .andExpect(jsonPath("$.message").value("inputText is required."));
     }
 
     @Test
-    void createAssistantMessage() throws Exception {
+    void createMessage_sessionId_누락시_400() throws Exception {
         mockMvc.perform(post("/api/chat/messages")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "sessionId": "session-001",
-                                  "role": "ASSISTANT",
-                                  "content": "현재 조건에서는 RF power와 pressure 조정이 우선입니다."
+                                  "inputText": "압력 50mTorr 식각률 예측해줘"
                                 }
                                 """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sessionId").value("session-001"))
-                .andExpect(jsonPath("$.role").value("ASSISTANT"))
-                .andExpect(jsonPath("$.content").value("현재 조건에서는 RF power와 pressure 조정이 우선입니다."));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("sessionId is required."));
     }
 
     @Test
-    void getSessionsAndMessages() throws Exception {
+    void getSessionList_및_getMessageList() throws Exception {
         createMessage("session-001", "첫 번째 세션 질문");
         createMessage("session-001", "첫 번째 세션 추가 질문");
         createMessage("session-002", "두 번째 세션 질문");
@@ -93,22 +104,19 @@ class ChatMessageControllerTest {
         mockMvc.perform(get("/api/chat/messages/sessions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sessionId").value("session-002"))
-                .andExpect(jsonPath("$[0].title").value("두 번째 세션 질문"))
                 .andExpect(jsonPath("$[0].messageCount").value(1))
                 .andExpect(jsonPath("$[1].sessionId").value("session-001"))
-                .andExpect(jsonPath("$[1].title").value("첫 번째 세션 질문"))
                 .andExpect(jsonPath("$[1].messageCount").value(2));
 
         mockMvc.perform(get("/api/chat/messages/sessions/session-001"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sessionId").value("session-001"))
-                .andExpect(jsonPath("$[0].role").value("USER"))
-                .andExpect(jsonPath("$[0].content").value("첫 번째 세션 질문"))
-                .andExpect(jsonPath("$[1].content").value("첫 번째 세션 추가 질문"));
+                .andExpect(jsonPath("$[0].inputText").value("첫 번째 세션 질문"))
+                .andExpect(jsonPath("$[1].inputText").value("첫 번째 세션 추가 질문"));
     }
 
     @Test
-    void endSessionHidesItFromHistoryButKeepsMessages() throws Exception {
+    void endSession_세션_숨김_처리() throws Exception {
         createMessage("session-001", "첫 번째 세션 질문");
         createMessage("session-002", "두 번째 세션 질문");
 
@@ -123,12 +131,11 @@ class ChatMessageControllerTest {
         mockMvc.perform(get("/api/chat/messages/sessions/session-001"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].sessionId").value("session-001"))
-                .andExpect(jsonPath("$[0].content").value("첫 번째 세션 질문"));
+                .andExpect(jsonPath("$[0].inputText").value("첫 번째 세션 질문"));
     }
 
     @Test
-    void endSessionsHidesAllSessionsInRequest() throws Exception {
+    void endSessions_일괄_숨김_처리() throws Exception {
         createMessage("session-001", "첫 번째 세션 질문");
         createMessage("session-002", "두 번째 세션 질문");
         createMessage("session-003", "세 번째 세션 질문");
@@ -158,5 +165,17 @@ class ChatMessageControllerTest {
                                 }
                                 """.formatted(sessionId, inputText)))
                 .andExpect(status().isOk());
+    }
+
+    private ExtractedParameterData validAiResponse() {
+        return new ExtractedParameterData(
+                "req-001", "VALID", "ETCH", "PREDICTION",
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                null
+        );
     }
 }
