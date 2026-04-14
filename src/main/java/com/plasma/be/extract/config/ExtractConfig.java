@@ -1,4 +1,4 @@
-package com.plasma.be.plasma.config;
+package com.plasma.be.extract.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -9,10 +9,10 @@ import org.springframework.web.client.RestClient;
 import java.time.Duration;
 
 @Configuration
-public class PlasmaAIConfig {
+public class ExtractConfig {
 
     @Bean
-    public RestClient plasmaAIRestClient(
+    public RestClient extractRestClient(
             @Value("${plasma.ai.base-url:http://localhost:8000}") String baseUrl,
             @Value("${plasma.ai.timeout-seconds:130}") int timeoutSeconds) {
 

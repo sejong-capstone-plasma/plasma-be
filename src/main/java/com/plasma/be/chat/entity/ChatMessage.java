@@ -16,11 +16,12 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "chat_message")
-public class Message {
+public class ChatMessage {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "message_id")
+    private Long messageId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "session_id", nullable = false)
@@ -31,23 +32,23 @@ public class Message {
     private MessageRole role;
 
     @Column(name = "input_text", nullable = false, columnDefinition = "TEXT")
-    private String content;
+    private String inputText;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    protected Message() {
+    protected ChatMessage() {
     }
 
-    public Message(Session session, MessageRole role, String content, LocalDateTime createdAt) {
+    public ChatMessage(Session session, MessageRole role, String inputText, LocalDateTime createdAt) {
         this.session = session;
         this.role = role;
-        this.content = content;
+        this.inputText = inputText;
         this.createdAt = createdAt;
     }
 
-    public Long getId() {
-        return id;
+    public Long getMessageId() {
+        return messageId;
     }
 
     public String getSessionId() {
@@ -62,8 +63,8 @@ public class Message {
         return role == null ? MessageRole.USER : role;
     }
 
-    public String getContent() {
-        return content;
+    public String getInputText() {
+        return inputText;
     }
 
     public LocalDateTime getCreatedAt() {

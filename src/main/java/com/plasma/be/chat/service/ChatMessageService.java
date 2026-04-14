@@ -1,10 +1,9 @@
 package com.plasma.be.chat.service;
 
 import com.plasma.be.chat.dto.ChatMessageCreateRequest;
-import com.plasma.be.chat.dto.ChatMessageCreateResponse;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
-import com.plasma.be.chat.entity.Message;
+import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.entity.Session;
 import com.plasma.be.chat.repository.ChatMessageRepository;
@@ -30,32 +29,24 @@ public class ChatMessageService {
     }
 
     @Transactional
-    public ChatMessageCreateResponse create(ChatMessageCreateRequest request) {
-        validate(request);
+    public ChatMessage saveMessage(ChatMessageCreateRequest request) {
+        validateRequest(request);
 
         String sessionId = request.sessionId().trim();
-        String content = normalizeContent(request);
+        String inputText = normalizeInputText(request);
         MessageRole role = resolveRole(request.role());
         LocalDateTime now = LocalDateTime.now();
 
         Session session = chatSessionRepository.findById(sessionId)
-                .orElseGet(() -> Session.create(sessionId, truncate(content), now));
+                .orElseGet(() -> Session.create(sessionId, truncate(inputText), now));
         session.registerMessage(now);
-        Session savedSession = chatSessionRepository.save(session);
+        chatSessionRepository.save(session);
 
-        Message saved = chatMessageRepository.save(new Message(savedSession, role, content, now));
-
-        return new ChatMessageCreateResponse(
-                saved.getId(),
-                saved.getSessionId(),
-                saved.getRole().name(),
-                saved.getContent(),
-                saved.getCreatedAt()
-        );
+        return chatMessageRepository.save(new ChatMessage(session, role, inputText, now));
     }
 
     @Transactional(readOnly = true)
-    public List<ChatSessionSummaryResponse> getSessions() {
+    public List<ChatSessionSummaryResponse> findSessions() {
         return chatSessionRepository.findAllByVisibleToUserTrueOrderByLastMessageAtDesc().stream()
                 .map(session -> new ChatSessionSummaryResponse(
                         session.getSessionId(),
@@ -66,12 +57,28 @@ public class ChatMessageService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ChatMessageSummaryResponse> findMessagesBySessionId(String sessionId) {
+        if (!StringUtils.hasText(sessionId)) {
+            throw new IllegalArgumentException("sessionId is required.");
+        }
+
+        return chatMessageRepository.findBySessionSessionIdOrderByCreatedAtAsc(sessionId.trim()).stream()
+                .map(message -> new ChatMessageSummaryResponse(
+                        message.getMessageId(),
+                        message.getSessionId(),
+                        message.getRole().name(),
+                        message.getInputText(),
+                        message.getCreatedAt()
+                ))
+                .toList();
+    }
+
     @Transactional
     public void endSession(String sessionId) {
         if (!StringUtils.hasText(sessionId)) {
             throw new IllegalArgumentException("sessionId is required.");
         }
-
         chatSessionRepository.findById(sessionId.trim())
                 .ifPresent(session -> session.end(LocalDateTime.now()));
     }
@@ -81,9 +88,7 @@ public class ChatMessageService {
         if (sessionIds == null || sessionIds.isEmpty()) {
             return;
         }
-
         LocalDateTime now = LocalDateTime.now();
-
         sessionIds.stream()
                 .filter(StringUtils::hasText)
                 .map(String::trim)
@@ -92,39 +97,20 @@ public class ChatMessageService {
                         .ifPresent(session -> session.end(now)));
     }
 
-    @Transactional(readOnly = true)
-    public List<ChatMessageSummaryResponse> getMessages(String sessionId) {
-        if (!StringUtils.hasText(sessionId)) {
-            throw new IllegalArgumentException("sessionId is required.");
-        }
-
-        return chatMessageRepository.findBySessionSessionIdOrderByCreatedAtAsc(sessionId.trim()).stream()
-                .map(message -> new ChatMessageSummaryResponse(
-                        message.getId(),
-                        message.getSessionId(),
-                        message.getRole().name(),
-                        message.getContent(),
-                        message.getCreatedAt()
-                ))
-                .toList();
-    }
-
-    private void validate(ChatMessageCreateRequest request) {
+    public boolean validateRequest(ChatMessageCreateRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("Request body is required.");
         }
         if (!StringUtils.hasText(request.sessionId())) {
             throw new IllegalArgumentException("sessionId is required.");
         }
-        if (!StringUtils.hasText(request.content()) && !StringUtils.hasText(request.inputText())) {
-            throw new IllegalArgumentException("content is required.");
+        if (!StringUtils.hasText(request.inputText())) {
+            throw new IllegalArgumentException("inputText is required.");
         }
+        return true;
     }
 
-    private String normalizeContent(ChatMessageCreateRequest request) {
-        if (StringUtils.hasText(request.content())) {
-            return request.content().trim();
-        }
+    private String normalizeInputText(ChatMessageCreateRequest request) {
         return request.inputText().trim();
     }
 
@@ -132,7 +118,6 @@ public class ChatMessageService {
         if (!StringUtils.hasText(role)) {
             return MessageRole.USER;
         }
-
         try {
             return MessageRole.valueOf(role.trim().toUpperCase());
         } catch (IllegalArgumentException exception) {
