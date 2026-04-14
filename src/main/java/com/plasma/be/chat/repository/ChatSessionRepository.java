@@ -7,5 +7,5 @@ import java.util.List;
 
 public interface ChatSessionRepository extends JpaRepository<Session, String> {
 
-    List<Session> findAllByOrderByLastMessageAtDesc();
+    List<Session> findAllByVisibleToUserTrueOrderByLastMessageAtDesc();
 }

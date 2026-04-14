@@ -41,13 +41,15 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-001",
-                                  "inputText": "이 공정 조건에 이정도 er인데, 이걸 올릴 수 있는 방안이 있어?"
+                                  "role": "USER",
+                                  "content": "이 공정 조건에 이정도 er인데, 이걸 올릴 수 있는 방안이 있어?"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messageId").isNumber())
                 .andExpect(jsonPath("$.sessionId").value("session-001"))
-                .andExpect(jsonPath("$.inputText").value("이 공정 조건에 이정도 er인데, 이걸 올릴 수 있는 방안이 있어?"))
+                .andExpect(jsonPath("$.role").value("USER"))
+                .andExpect(jsonPath("$.content").value("이 공정 조건에 이정도 er인데, 이걸 올릴 수 있는 방안이 있어?"))
                 .andExpect(jsonPath("$.savedAt").exists());
     }
 
@@ -62,7 +64,24 @@ class ChatMessageControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("inputText is required."));
+                .andExpect(jsonPath("$.message").value("content is required."));
+    }
+
+    @Test
+    void createAssistantMessage() throws Exception {
+        mockMvc.perform(post("/api/chat/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-001",
+                                  "role": "ASSISTANT",
+                                  "content": "현재 조건에서는 RF power와 pressure 조정이 우선입니다."
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").value("session-001"))
+                .andExpect(jsonPath("$.role").value("ASSISTANT"))
+                .andExpect(jsonPath("$.content").value("현재 조건에서는 RF power와 pressure 조정이 우선입니다."));
     }
 
     @Test
@@ -83,8 +102,50 @@ class ChatMessageControllerTest {
         mockMvc.perform(get("/api/chat/messages/sessions/session-001"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sessionId").value("session-001"))
-                .andExpect(jsonPath("$[0].inputText").value("첫 번째 세션 질문"))
-                .andExpect(jsonPath("$[1].inputText").value("첫 번째 세션 추가 질문"));
+                .andExpect(jsonPath("$[0].role").value("USER"))
+                .andExpect(jsonPath("$[0].content").value("첫 번째 세션 질문"))
+                .andExpect(jsonPath("$[1].content").value("첫 번째 세션 추가 질문"));
+    }
+
+    @Test
+    void endSessionHidesItFromHistoryButKeepsMessages() throws Exception {
+        createMessage("session-001", "첫 번째 세션 질문");
+        createMessage("session-002", "두 번째 세션 질문");
+
+        mockMvc.perform(post("/api/chat/messages/sessions/session-001/end"))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/chat/messages/sessions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].sessionId").value("session-002"));
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].sessionId").value("session-001"))
+                .andExpect(jsonPath("$[0].content").value("첫 번째 세션 질문"));
+    }
+
+    @Test
+    void endSessionsHidesAllSessionsInRequest() throws Exception {
+        createMessage("session-001", "첫 번째 세션 질문");
+        createMessage("session-002", "두 번째 세션 질문");
+        createMessage("session-003", "세 번째 세션 질문");
+
+        mockMvc.perform(post("/api/chat/messages/sessions/end")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionIds": ["session-001", "session-003"]
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/chat/messages/sessions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].sessionId").value("session-002"));
     }
 
     private void createMessage(String sessionId, String inputText) throws Exception {

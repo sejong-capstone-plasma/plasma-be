@@ -4,6 +4,7 @@ import com.plasma.be.chat.dto.ChatMessageCreateRequest;
 import com.plasma.be.chat.dto.ChatMessageCreateResponse;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
+import com.plasma.be.chat.dto.ChatSessionsEndRequest;
 import com.plasma.be.chat.service.ChatMessageService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -35,6 +36,18 @@ public class ChatMessageController {
     @GetMapping("/sessions")
     public ResponseEntity<List<ChatSessionSummaryResponse>> getSessions() {
         return ResponseEntity.ok(chatMessageService.getSessions());
+    }
+
+    @PostMapping("/sessions/{sessionId}/end")
+    public ResponseEntity<Void> endSession(@PathVariable String sessionId) {
+        chatMessageService.endSession(sessionId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/sessions/end")
+    public ResponseEntity<Void> endSessions(@RequestBody(required = false) ChatSessionsEndRequest request) {
+        chatMessageService.endSessions(request == null ? List.of() : request.sessionIds());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/sessions/{sessionId}")

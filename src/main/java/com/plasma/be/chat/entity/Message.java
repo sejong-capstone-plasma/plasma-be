@@ -2,6 +2,8 @@ package com.plasma.be.chat.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -24,8 +26,12 @@ public class Message {
     @JoinColumn(name = "session_id", nullable = false)
     private Session session;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", length = 20)
+    private MessageRole role;
+
     @Column(name = "input_text", nullable = false, columnDefinition = "TEXT")
-    private String inputText;
+    private String content;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -33,9 +39,10 @@ public class Message {
     protected Message() {
     }
 
-    public Message(Session session, String inputText, LocalDateTime createdAt) {
+    public Message(Session session, MessageRole role, String content, LocalDateTime createdAt) {
         this.session = session;
-        this.inputText = inputText;
+        this.role = role;
+        this.content = content;
         this.createdAt = createdAt;
     }
 
@@ -51,8 +58,12 @@ public class Message {
         return session;
     }
 
-    public String getInputText() {
-        return inputText;
+    public MessageRole getRole() {
+        return role == null ? MessageRole.USER : role;
+    }
+
+    public String getContent() {
+        return content;
     }
 
     public LocalDateTime getCreatedAt() {

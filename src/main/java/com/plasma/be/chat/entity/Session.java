@@ -27,6 +27,12 @@ public class Session {
     @Column(name = "message_count", nullable = false)
     private int messageCount;
 
+    @Column(name = "visible_to_user", nullable = false)
+    private boolean visibleToUser;
+
+    @Column(name = "ended_at")
+    private LocalDateTime endedAt;
+
     protected Session() {
     }
 
@@ -36,6 +42,8 @@ public class Session {
         this.createdAt = createdAt;
         this.lastMessageAt = createdAt;
         this.messageCount = 0;
+        this.visibleToUser = true;
+        this.endedAt = null;
     }
 
     public static Session create(String sessionId, String title, LocalDateTime createdAt) {
@@ -45,6 +53,13 @@ public class Session {
     public void registerMessage(LocalDateTime createdAt) {
         this.lastMessageAt = createdAt;
         this.messageCount += 1;
+        this.visibleToUser = true;
+        this.endedAt = null;
+    }
+
+    public void end(LocalDateTime endedAt) {
+        this.visibleToUser = false;
+        this.endedAt = endedAt;
     }
 
     public String getSessionId() {
@@ -65,5 +80,13 @@ public class Session {
 
     public int getMessageCount() {
         return messageCount;
+    }
+
+    public boolean isVisibleToUser() {
+        return visibleToUser;
+    }
+
+    public LocalDateTime getEndedAt() {
+        return endedAt;
     }
 }
