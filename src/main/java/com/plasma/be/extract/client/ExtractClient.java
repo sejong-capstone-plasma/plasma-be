@@ -1,12 +1,12 @@
 package com.plasma.be.extract.client;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Map;
 import java.util.UUID;
@@ -18,12 +18,12 @@ public class ExtractClient {
     private final String extractEndpoint;
     private final int timeout;
     private final RestClient httpClient;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
     private int lastResponseStatus;
 
     public ExtractClient(
             RestClient extractRestClient,
-            ObjectMapper objectMapper,
+            JsonMapper objectMapper,
             @Value("${plasma.ai.base-url:http://localhost:8000}") String baseUrl,
             @Value("${plasma.ai.timeout-seconds:130}") int timeout) {
         this.httpClient = extractRestClient;
@@ -44,7 +44,7 @@ public class ExtractClient {
             return objectMapper.writeValueAsString(
                     Map.of("request_id", UUID.randomUUID().toString(), "user_input", message)
             );
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to build request body", e);
         }
     }
@@ -68,7 +68,7 @@ public class ExtractClient {
     ExtractedParameterData parseResponse(String response) {
         try {
             return objectMapper.readValue(response, ExtractedParameterData.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to parse AI server response", e);
         }
     }
