@@ -4,7 +4,7 @@ spring:
 
 plasma:
   ai:
-    base-url: http://localhost:8000
+    base-url: http://jh-devnet.iptime.org:17181
     timeout-seconds: 130
 
 ---
