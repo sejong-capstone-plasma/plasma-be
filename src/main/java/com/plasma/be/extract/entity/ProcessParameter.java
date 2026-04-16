@@ -6,13 +6,13 @@ import jakarta.persistence.Embeddable;
 @Embeddable
 public class ProcessParameter {
 
-    @Column(name = "value")
+    @Column(name = "param_value")
     private Double value;
 
-    @Column(name = "unit", length = 20)
+    @Column(name = "param_unit", length = 20)
     private String unit;
 
-    @Column(name = "status", length = 20)
+    @Column(name = "param_status", length = 20)
     private String status;
 
     protected ProcessParameter() {

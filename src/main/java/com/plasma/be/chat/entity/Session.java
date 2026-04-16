@@ -46,10 +46,12 @@ public class Session {
         this.endedAt = null;
     }
 
+    // 새 채팅 세션을 생성한다.
     public static Session create(String sessionId, String title, LocalDateTime createdAt) {
         return new Session(sessionId, title, createdAt);
     }
 
+    // 새 메시지 도착 시 세션의 최근 활동 정보와 노출 상태를 갱신한다.
     public void registerMessage(LocalDateTime createdAt) {
         this.lastMessageAt = createdAt;
         this.messageCount += 1;
@@ -57,6 +59,7 @@ public class Session {
         this.endedAt = null;
     }
 
+    // 세션을 종료 상태로 바꾸고 사용자 목록에서 숨긴다.
     public void end(LocalDateTime endedAt) {
         this.visibleToUser = false;
         this.endedAt = endedAt;

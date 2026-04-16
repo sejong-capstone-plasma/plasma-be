@@ -7,6 +7,7 @@ import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
+import com.plasma.be.extract.repository.ExtractionResultRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,11 +39,15 @@ class ChatMessageControllerTest {
     @Autowired
     private ChatSessionRepository chatSessionRepository;
 
+    @Autowired
+    private ExtractionResultRepository extractionResultRepository;
+
     @MockitoBean
     private ExtractClient extractClient;
 
     @BeforeEach
     void setUp() {
+        extractionResultRepository.deleteAll();
         chatMessageRepository.deleteAll();
         chatSessionRepository.deleteAll();
         when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());

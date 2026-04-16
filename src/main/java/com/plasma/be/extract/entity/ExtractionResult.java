@@ -85,20 +85,24 @@ public class ExtractionResult {
         this.updatedAt = this.createdAt;
     }
 
+    // 채팅 메시지 기반의 초기 추출 결과 엔티티를 생성한다.
     public static ExtractionResult createExtractionResult(ChatMessage chatMessage, String requestId,
                                                           String taskType, String processType) {
         return new ExtractionResult(chatMessage, requestId, taskType, processType);
     }
 
+    // 추출된 공정 파라미터를 이름 기준으로 저장한다.
     public void addProcessParam(String key, ProcessParameter param) {
         this.processParams.put(key, param);
     }
 
+    // 현재 etch rate 값을 추출 결과에 반영한다.
     public void setCurrentEr(ProcessParameter param) {
         this.currentEr = param;
         this.updatedAt = LocalDateTime.now();
     }
 
+    // 전체 추출 상태를 최신 값으로 갱신한다.
     public void updateStatus(String status) {
         this.extractionStatus = status;
         this.updatedAt = LocalDateTime.now();
