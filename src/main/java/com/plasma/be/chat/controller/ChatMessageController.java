@@ -10,11 +10,6 @@ import com.plasma.be.extract.dto.ExtractionResponse;
 import com.plasma.be.extract.service.ExtractService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
 
@@ -22,8 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/chat/messages")
-public class ChatMessageController {
+public class ChatMessageController implements ChatMessageApi {
 
     private final ChatMessageService chatMessageService;
     private final ExtractService extractService;
@@ -33,31 +27,31 @@ public class ChatMessageController {
         this.extractService = extractService;
     }
 
-    @PostMapping
-    public ResponseEntity<ExtractionResponse> createMessage(@RequestBody ChatMessageCreateRequest request) {
+    @Override
+    public ResponseEntity<ExtractionResponse> createMessage(ChatMessageCreateRequest request) {
         ChatMessage savedMessage = chatMessageService.saveMessage(request);
         ExtractionResponse response = extractService.extractFromMessage(savedMessage);
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/sessions")
+    @Override
     public ResponseEntity<List<ChatSessionSummaryResponse>> getSessionList() {
         return ResponseEntity.ok(chatMessageService.findSessions());
     }
 
-    @GetMapping("/sessions/{sessionId}")
-    public ResponseEntity<List<ChatMessageSummaryResponse>> getMessageList(@PathVariable String sessionId) {
+    @Override
+    public ResponseEntity<List<ChatMessageSummaryResponse>> getMessageList(String sessionId) {
         return ResponseEntity.ok(chatMessageService.findMessagesBySessionId(sessionId));
     }
 
-    @PostMapping("/sessions/{sessionId}/end")
-    public ResponseEntity<Void> endSession(@PathVariable String sessionId) {
+    @Override
+    public ResponseEntity<Void> endSession(String sessionId) {
         chatMessageService.endSession(sessionId);
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/sessions/end")
-    public ResponseEntity<Void> endSessions(@RequestBody(required = false) ChatSessionsEndRequest request) {
+    @Override
+    public ResponseEntity<Void> endSessions(ChatSessionsEndRequest request) {
         chatMessageService.endSessions(request == null ? List.of() : request.sessionIds());
         return ResponseEntity.noContent().build();
     }
