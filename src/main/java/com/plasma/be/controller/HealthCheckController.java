@@ -23,6 +23,7 @@ public class HealthCheckController {
     @Value("${serverName}")
     private String serverName;
 
+    // 서버 상태 확인에 필요한 기본 정보를 반환한다.
     @GetMapping("/hc")
     public ResponseEntity<?> healthCheck() {
         Map<String, String> response = new TreeMap<>();
@@ -35,11 +36,13 @@ public class HealthCheckController {
         return ResponseEntity.ok(response);
     }
 
+    // 루트 경로 접근 시 서비스 식별 문자열을 반환한다.
     @GetMapping("/")
     public ResponseEntity<String> home() {
         return ResponseEntity.ok("PLASMA BACKEND");
     }
 
+    // 현재 서버 환경값만 간단히 조회한다.
     @GetMapping("/env")
     public ResponseEntity<?> getEnv() {
         return ResponseEntity.ok(env);

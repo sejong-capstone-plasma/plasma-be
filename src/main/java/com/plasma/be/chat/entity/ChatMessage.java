@@ -40,6 +40,7 @@ public class ChatMessage {
     protected ChatMessage() {
     }
 
+    // 채팅 세션에 속한 단일 메시지 엔티티를 생성한다.
     public ChatMessage(Session session, MessageRole role, String inputText, LocalDateTime createdAt) {
         this.session = session;
         this.role = role;

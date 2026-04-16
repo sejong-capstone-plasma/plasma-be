@@ -28,6 +28,7 @@ public class ChatMessageService {
         this.chatSessionRepository = chatSessionRepository;
     }
 
+    // 요청을 검증한 뒤 세션을 갱신하고 메시지를 저장한다.
     @Transactional
     public ChatMessage saveMessage(ChatMessageCreateRequest request) {
         validateRequest(request);
@@ -45,6 +46,7 @@ public class ChatMessageService {
         return chatMessageRepository.save(new ChatMessage(session, role, inputText, now));
     }
 
+    // 사용자에게 보이는 세션만 최근 메시지 순으로 조회한다.
     @Transactional(readOnly = true)
     public List<ChatSessionSummaryResponse> findSessions() {
         return chatSessionRepository.findAllByVisibleToUserTrueOrderByLastMessageAtDesc().stream()
@@ -57,6 +59,7 @@ public class ChatMessageService {
                 .toList();
     }
 
+    // 세션 ID로 메시지 목록을 조회해 응답 DTO로 변환한다.
     @Transactional(readOnly = true)
     public List<ChatMessageSummaryResponse> findMessagesBySessionId(String sessionId) {
         if (!StringUtils.hasText(sessionId)) {
@@ -74,6 +77,7 @@ public class ChatMessageService {
                 .toList();
     }
 
+    // 단일 세션을 종료 처리해 더 이상 목록에 노출되지 않게 한다.
     @Transactional
     public void endSession(String sessionId) {
         if (!StringUtils.hasText(sessionId)) {
@@ -83,6 +87,7 @@ public class ChatMessageService {
                 .ifPresent(session -> session.end(LocalDateTime.now()));
     }
 
+    // 전달받은 여러 세션 ID를 중복 제거 후 일괄 종료한다.
     @Transactional
     public void endSessions(List<String> sessionIds) {
         if (sessionIds == null || sessionIds.isEmpty()) {
@@ -97,6 +102,7 @@ public class ChatMessageService {
                         .ifPresent(session -> session.end(now)));
     }
 
+    // 메시지 저장 전 필수 입력값을 검증한다.
     public boolean validateRequest(ChatMessageCreateRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("Request body is required.");
@@ -110,10 +116,12 @@ public class ChatMessageService {
         return true;
     }
 
+    // 사용자 입력의 앞뒤 공백을 정리한다.
     private String normalizeInputText(ChatMessageCreateRequest request) {
         return request.inputText().trim();
     }
 
+    // 문자열 role 값을 enum으로 안전하게 변환한다.
     private MessageRole resolveRole(String role) {
         if (!StringUtils.hasText(role)) {
             return MessageRole.USER;
@@ -125,6 +133,7 @@ public class ChatMessageService {
         }
     }
 
+    // 세션 제목으로 사용할 수 있도록 긴 입력을 짧게 요약한다.
     private String truncate(String text) {
         String normalized = text.trim().replaceAll("\\s+", " ");
         if (normalized.length() <= 36) {
