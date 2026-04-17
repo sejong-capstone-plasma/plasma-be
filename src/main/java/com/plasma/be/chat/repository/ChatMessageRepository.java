@@ -11,5 +11,6 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     // 세션 정보를 함께 읽어 메시지 목록을 생성 시각순으로 조회한다.
     @EntityGraph(attributePaths = "session")
-    List<ChatMessage> findBySessionSessionIdOrderByCreatedAtAsc(String sessionId);
+    List<ChatMessage> findBySessionSessionIdAndSessionOwnerSessionKeyOrderByCreatedAtAsc(String sessionId,
+                                                                                         String ownerSessionKey);
 }

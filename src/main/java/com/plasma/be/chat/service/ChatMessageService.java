@@ -6,6 +6,7 @@ import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.entity.Session;
+import com.plasma.be.chat.exception.SessionAccessDeniedException;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
 import org.springframework.stereotype.Service;
@@ -30,16 +31,17 @@ public class ChatMessageService {
 
     // 요청을 검증한 뒤 세션을 갱신하고 메시지를 저장한다.
     @Transactional
-    public ChatMessage saveMessage(ChatMessageCreateRequest request) {
+    public ChatMessage saveMessage(ChatMessageCreateRequest request, String ownerSessionKey) {
         validateRequest(request);
+        validateOwnerSessionKey(ownerSessionKey);
 
         String sessionId = request.sessionId().trim();
         String inputText = normalizeInputText(request);
         MessageRole role = resolveRole(request.role());
         LocalDateTime now = LocalDateTime.now();
 
-        Session session = chatSessionRepository.findById(sessionId)
-                .orElseGet(() -> Session.create(sessionId, truncate(inputText), now));
+        Session session = chatSessionRepository.findBySessionIdAndOwnerSessionKey(sessionId, ownerSessionKey)
+                .orElseGet(() -> createOwnedSession(sessionId, ownerSessionKey, inputText, now));
         session.registerMessage(now);
         chatSessionRepository.save(session);
 
@@ -48,8 +50,10 @@ public class ChatMessageService {
 
     // 사용자에게 보이는 세션만 최근 메시지 순으로 조회한다.
     @Transactional(readOnly = true)
-    public List<ChatSessionSummaryResponse> findSessions() {
-        return chatSessionRepository.findAllByVisibleToUserTrueOrderByLastMessageAtDesc().stream()
+    public List<ChatSessionSummaryResponse> findSessions(String ownerSessionKey) {
+        validateOwnerSessionKey(ownerSessionKey);
+
+        return chatSessionRepository.findAllByOwnerSessionKeyAndVisibleToUserTrueOrderByLastMessageAtDesc(ownerSessionKey).stream()
                 .map(session -> new ChatSessionSummaryResponse(
                         session.getSessionId(),
                         session.getTitle(),
@@ -61,12 +65,18 @@ public class ChatMessageService {
 
     // 세션 ID로 메시지 목록을 조회해 응답 DTO로 변환한다.
     @Transactional(readOnly = true)
-    public List<ChatMessageSummaryResponse> findMessagesBySessionId(String sessionId) {
+    public List<ChatMessageSummaryResponse> findMessagesBySessionId(String sessionId, String ownerSessionKey) {
         if (!StringUtils.hasText(sessionId)) {
             throw new IllegalArgumentException("sessionId is required.");
         }
+        validateOwnerSessionKey(ownerSessionKey);
 
-        return chatMessageRepository.findBySessionSessionIdOrderByCreatedAtAsc(sessionId.trim()).stream()
+        assertSessionAccessible(sessionId.trim(), ownerSessionKey);
+
+        return chatMessageRepository.findBySessionSessionIdAndSessionOwnerSessionKeyOrderByCreatedAtAsc(
+                        sessionId.trim(),
+                        ownerSessionKey
+                ).stream()
                 .map(message -> new ChatMessageSummaryResponse(
                         message.getMessageId(),
                         message.getSessionId(),
@@ -79,17 +89,26 @@ public class ChatMessageService {
 
     // 단일 세션을 종료 처리해 더 이상 목록에 노출되지 않게 한다.
     @Transactional
-    public void endSession(String sessionId) {
+    public void endSession(String sessionId, String ownerSessionKey) {
         if (!StringUtils.hasText(sessionId)) {
             throw new IllegalArgumentException("sessionId is required.");
         }
-        chatSessionRepository.findById(sessionId.trim())
-                .ifPresent(session -> session.end(LocalDateTime.now()));
+        validateOwnerSessionKey(ownerSessionKey);
+
+        chatSessionRepository.findBySessionIdAndOwnerSessionKey(sessionId.trim(), ownerSessionKey)
+                .ifPresentOrElse(
+                        session -> session.end(LocalDateTime.now()),
+                        () -> {
+                            throw new SessionAccessDeniedException();
+                        }
+                );
     }
 
     // 전달받은 여러 세션 ID를 중복 제거 후 일괄 종료한다.
     @Transactional
-    public void endSessions(List<String> sessionIds) {
+    public void endSessions(List<String> sessionIds, String ownerSessionKey) {
+        validateOwnerSessionKey(ownerSessionKey);
+
         if (sessionIds == null || sessionIds.isEmpty()) {
             return;
         }
@@ -98,7 +117,7 @@ public class ChatMessageService {
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))
-                .forEach(sessionId -> chatSessionRepository.findById(sessionId)
+                .forEach(sessionId -> chatSessionRepository.findBySessionIdAndOwnerSessionKey(sessionId, ownerSessionKey)
                         .ifPresent(session -> session.end(now)));
     }
 
@@ -119,6 +138,28 @@ public class ChatMessageService {
     // 사용자 입력의 앞뒤 공백을 정리한다.
     private String normalizeInputText(ChatMessageCreateRequest request) {
         return request.inputText().trim();
+    }
+
+    private Session createOwnedSession(String sessionId,
+                                       String ownerSessionKey,
+                                       String inputText,
+                                       LocalDateTime now) {
+        if (chatSessionRepository.findById(sessionId).isPresent()) {
+            throw new SessionAccessDeniedException();
+        }
+        return Session.create(sessionId, ownerSessionKey, truncate(inputText), now);
+    }
+
+    private void assertSessionAccessible(String sessionId, String ownerSessionKey) {
+        if (chatSessionRepository.findBySessionIdAndOwnerSessionKey(sessionId, ownerSessionKey).isEmpty()) {
+            throw new SessionAccessDeniedException();
+        }
+    }
+
+    private void validateOwnerSessionKey(String ownerSessionKey) {
+        if (!StringUtils.hasText(ownerSessionKey)) {
+            throw new IllegalStateException("Browser session is required.");
+        }
     }
 
     // 문자열 role 값을 enum으로 안전하게 변환한다.

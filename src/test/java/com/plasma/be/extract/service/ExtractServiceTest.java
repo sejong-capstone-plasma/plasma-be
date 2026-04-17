@@ -145,7 +145,7 @@ class ExtractServiceTest {
     // ── 헬퍼 메서드 ───────────────────────────────────────────────────────────
 
     private ChatMessage dummyChatMessage() {
-        Session session = Session.create("session-001", "테스트 세션", LocalDateTime.now());
+        Session session = Session.create("session-001", "browser-001", "테스트 세션", LocalDateTime.now());
         return new ChatMessage(session, MessageRole.USER, "압력 50mTorr 식각률 예측해줘", LocalDateTime.now());
     }
 

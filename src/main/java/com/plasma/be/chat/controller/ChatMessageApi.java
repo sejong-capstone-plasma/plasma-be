@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -83,13 +84,14 @@ public interface ChatMessageApi {
                                     }
                                     """))
             )
-            @RequestBody ChatMessageCreateRequest request
+            @RequestBody ChatMessageCreateRequest request,
+            HttpSession browserSession
     );
 
     @Operation(summary = "세션 목록 조회", description = "활성 상태인 채팅 세션 목록을 최근 메시지 순으로 반환합니다.")
     @ApiResponse(responseCode = "200", description = "세션 목록 반환 성공")
     @GetMapping("/sessions")
-    ResponseEntity<List<ChatSessionSummaryResponse>> getSessionList();
+    ResponseEntity<List<ChatSessionSummaryResponse>> getSessionList(HttpSession browserSession);
 
     @Operation(summary = "세션별 메시지 조회", description = "특정 세션에 속한 모든 채팅 메시지를 생성 시간 순으로 반환합니다.")
     @ApiResponses({
@@ -99,7 +101,8 @@ public interface ChatMessageApi {
     @GetMapping("/sessions/{sessionId}")
     ResponseEntity<List<ChatMessageSummaryResponse>> getMessageList(
             @Parameter(description = "조회할 세션 ID", example = "session-001")
-            @PathVariable String sessionId
+            @PathVariable String sessionId,
+            HttpSession browserSession
     );
 
     @Operation(summary = "세션 종료", description = "특정 세션을 종료합니다. 종료된 세션은 목록에서 숨겨지지만 메시지는 유지됩니다.")
@@ -107,7 +110,8 @@ public interface ChatMessageApi {
     @PostMapping("/sessions/{sessionId}/end")
     ResponseEntity<Void> endSession(
             @Parameter(description = "종료할 세션 ID", example = "session-001")
-            @PathVariable String sessionId
+            @PathVariable String sessionId,
+            HttpSession browserSession
     );
 
     @Operation(summary = "세션 일괄 종료", description = "여러 세션을 한 번에 종료합니다.")
@@ -121,6 +125,7 @@ public interface ChatMessageApi {
                                     { "sessionIds": ["session-001", "session-003"] }
                                     """))
             )
-            @RequestBody(required = false) ChatSessionsEndRequest request
+            @RequestBody(required = false) ChatSessionsEndRequest request,
+            HttpSession browserSession
     );
 }

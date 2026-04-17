@@ -15,6 +15,9 @@ public class Session {
     @Column(name = "session_id", nullable = false, length = 100)
     private String sessionId;
 
+    @Column(name = "owner_session_key", nullable = false, length = 120)
+    private String ownerSessionKey;
+
     @Column(name = "title", nullable = false, length = 200)
     private String title;
 
@@ -36,8 +39,9 @@ public class Session {
     protected Session() {
     }
 
-    private Session(String sessionId, String title, LocalDateTime createdAt) {
+    private Session(String sessionId, String ownerSessionKey, String title, LocalDateTime createdAt) {
         this.sessionId = sessionId;
+        this.ownerSessionKey = ownerSessionKey;
         this.title = title;
         this.createdAt = createdAt;
         this.lastMessageAt = createdAt;
@@ -47,8 +51,8 @@ public class Session {
     }
 
     // 새 채팅 세션을 생성한다.
-    public static Session create(String sessionId, String title, LocalDateTime createdAt) {
-        return new Session(sessionId, title, createdAt);
+    public static Session create(String sessionId, String ownerSessionKey, String title, LocalDateTime createdAt) {
+        return new Session(sessionId, ownerSessionKey, title, createdAt);
     }
 
     // 새 메시지 도착 시 세션의 최근 활동 정보와 노출 상태를 갱신한다.
@@ -67,6 +71,10 @@ public class Session {
 
     public String getSessionId() {
         return sessionId;
+    }
+
+    public String getOwnerSessionKey() {
+        return ownerSessionKey;
     }
 
     public String getTitle() {

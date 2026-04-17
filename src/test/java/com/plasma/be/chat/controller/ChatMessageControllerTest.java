@@ -1,8 +1,5 @@
 package com.plasma.be.chat.controller;
 
-import com.plasma.be.chat.entity.ChatMessage;
-import com.plasma.be.chat.entity.MessageRole;
-import com.plasma.be.chat.entity.Session;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.extract.client.ExtractClient;
@@ -14,10 +11,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -55,7 +51,10 @@ class ChatMessageControllerTest {
 
     @Test
     void createMessage_성공() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+
         mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -77,6 +76,7 @@ class ChatMessageControllerTest {
     @Test
     void createMessage_inputText_누락시_400() throws Exception {
         mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession("browser-a"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -90,6 +90,7 @@ class ChatMessageControllerTest {
     @Test
     void createMessage_sessionId_누락시_400() throws Exception {
         mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession("browser-a"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -102,18 +103,22 @@ class ChatMessageControllerTest {
 
     @Test
     void getSessionList_및_getMessageList() throws Exception {
-        createMessage("session-001", "첫 번째 세션 질문");
-        createMessage("session-001", "첫 번째 세션 추가 질문");
-        createMessage("session-002", "두 번째 세션 질문");
+        MockHttpSession browserA = browserSession("browser-a");
+        MockHttpSession browserB = browserSession("browser-b");
 
-        mockMvc.perform(get("/api/chat/messages/sessions"))
+        createMessage(browserA, "session-001", "첫 번째 세션 질문");
+        createMessage(browserA, "session-001", "첫 번째 세션 추가 질문");
+        createMessage(browserA, "session-002", "두 번째 세션 질문");
+        createMessage(browserB, "session-003", "다른 브라우저 세션 질문");
+
+        mockMvc.perform(get("/api/chat/messages/sessions").session(browserA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sessionId").value("session-002"))
                 .andExpect(jsonPath("$[0].messageCount").value(1))
                 .andExpect(jsonPath("$[1].sessionId").value("session-001"))
                 .andExpect(jsonPath("$[1].messageCount").value(2));
 
-        mockMvc.perform(get("/api/chat/messages/sessions/session-001"))
+        mockMvc.perform(get("/api/chat/messages/sessions/session-001").session(browserA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sessionId").value("session-001"))
                 .andExpect(jsonPath("$[0].inputText").value("첫 번째 세션 질문"))
@@ -122,18 +127,20 @@ class ChatMessageControllerTest {
 
     @Test
     void endSession_세션_숨김_처리() throws Exception {
-        createMessage("session-001", "첫 번째 세션 질문");
-        createMessage("session-002", "두 번째 세션 질문");
+        MockHttpSession browserA = browserSession("browser-a");
 
-        mockMvc.perform(post("/api/chat/messages/sessions/session-001/end"))
+        createMessage(browserA, "session-001", "첫 번째 세션 질문");
+        createMessage(browserA, "session-002", "두 번째 세션 질문");
+
+        mockMvc.perform(post("/api/chat/messages/sessions/session-001/end").session(browserA))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/chat/messages/sessions"))
+        mockMvc.perform(get("/api/chat/messages/sessions").session(browserA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].sessionId").value("session-002"));
 
-        mockMvc.perform(get("/api/chat/messages/sessions/session-001"))
+        mockMvc.perform(get("/api/chat/messages/sessions/session-001").session(browserA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].inputText").value("첫 번째 세션 질문"));
@@ -141,11 +148,16 @@ class ChatMessageControllerTest {
 
     @Test
     void endSessions_일괄_숨김_처리() throws Exception {
-        createMessage("session-001", "첫 번째 세션 질문");
-        createMessage("session-002", "두 번째 세션 질문");
-        createMessage("session-003", "세 번째 세션 질문");
+        MockHttpSession browserA = browserSession("browser-a");
+        MockHttpSession browserB = browserSession("browser-b");
+
+        createMessage(browserA, "session-001", "첫 번째 세션 질문");
+        createMessage(browserA, "session-002", "두 번째 세션 질문");
+        createMessage(browserA, "session-003", "세 번째 세션 질문");
+        createMessage(browserB, "session-004", "다른 브라우저 세션 질문");
 
         mockMvc.perform(post("/api/chat/messages/sessions/end")
+                        .session(browserA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -154,14 +166,57 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/chat/messages/sessions"))
+        mockMvc.perform(get("/api/chat/messages/sessions").session(browserA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].sessionId").value("session-002"));
+
+        mockMvc.perform(get("/api/chat/messages/sessions").session(browserB))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].sessionId").value("session-004"));
     }
 
-    private void createMessage(String sessionId, String inputText) throws Exception {
+    @Test
+    void 다른_브라우저의_sessionId로_메시지_조회시_404() throws Exception {
+        MockHttpSession ownerBrowser = browserSession("browser-a");
+        MockHttpSession foreignBrowser = browserSession("browser-b");
+
+        createMessage(ownerBrowser, "session-001", "첫 번째 세션 질문");
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-001").session(foreignBrowser))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Session is not accessible from the current browser."));
+    }
+
+    @Test
+    void 다른_브라우저의_sessionId로_메시지_저장시_404() throws Exception {
+        MockHttpSession ownerBrowser = browserSession("browser-a");
+        MockHttpSession foreignBrowser = browserSession("browser-b");
+
+        createMessage(ownerBrowser, "session-001", "첫 번째 세션 질문");
+
         mockMvc.perform(post("/api/chat/messages")
+                        .session(foreignBrowser)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-001",
+                                  "inputText": "가로채기 시도"
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Session is not accessible from the current browser."));
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-001").session(ownerBrowser))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].inputText").value("첫 번째 세션 질문"));
+    }
+
+    private void createMessage(MockHttpSession browserSession, String sessionId, String inputText) throws Exception {
+        mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -170,6 +225,10 @@ class ChatMessageControllerTest {
                                 }
                                 """.formatted(sessionId, inputText)))
                 .andExpect(status().isOk());
+    }
+
+    private MockHttpSession browserSession(String id) {
+        return new MockHttpSession(null, id);
     }
 
     private ExtractedParameterData validAiResponse() {
