@@ -2,7 +2,7 @@ package com.plasma.be.extract.controller;
 
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.dto.ExtractTestRequest;
-import com.plasma.be.extract.dto.ParametersResponse;
+import com.plasma.be.extract.dto.ParameterValidationResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -20,53 +20,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.util.List;
 
-@Tag(name = "Extract Test", description = "AI 파라미터 추출 기능 단독 테스트 API. 추출만 수행하거나 DB 저장까지 검증합니다.")
+@Tag(name = "Extract Test", description = "AI 파라미터 추출 기능 단독 테스트 API")
 @RequestMapping("/api/test/extract")
 public interface ExtractTestApi {
 
-    @Operation(
-            summary = "AI 서버 연결 확인",
-            description = "AI 서버(Plasma AI)가 정상적으로 응답하는지 확인합니다. 고정된 테스트 문장으로 추출을 시도합니다."
-    )
+    @Operation(summary = "AI 서버 연결 확인", description = "고정된 테스트 문장으로 AI 서버 응답 여부를 확인합니다.")
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "AI 서버 연결 정상",
-                    content = @Content(mediaType = "application/json",
-                            examples = @ExampleObject(value = """
-                                    {
-                                      "status": "ok",
-                                      "message": "AI server is reachable"
-                                    }
-                                    """))
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "AI 서버 연결 실패",
-                    content = @Content(mediaType = "application/json",
-                            examples = @ExampleObject(value = """
-                                    {
-                                      "status": "error",
-                                      "message": "AI server error: Connection refused"
-                                    }
-                                    """))
-            )
+            @ApiResponse(responseCode = "200", description = "AI 서버 연결 정상"),
+            @ApiResponse(responseCode = "500", description = "AI 서버 연결 실패")
     })
     @GetMapping("/ping")
     ResponseEntity<?> ping();
 
-    @Operation(
-            summary = "AI 서버 raw 응답 확인",
-            description = "자연어 입력을 AI 서버에 전송하고 가공 없이 원본 응답(ExtractedParameterData)을 그대로 반환합니다. "
-                    + "AI 서버의 실제 응답 형태를 확인할 때 사용합니다."
-    )
+    @Operation(summary = "AI 서버 raw 응답 확인", description = "자연어 입력을 보내고 원본 응답을 그대로 반환합니다.")
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "AI 서버 원본 응답",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ExtractedParameterData.class))
-            ),
+            @ApiResponse(responseCode = "200", description = "AI 서버 원본 응답",
+                    content = @Content(schema = @Schema(implementation = ExtractedParameterData.class))),
             @ApiResponse(responseCode = "500", description = "AI 서버 통신 오류")
     })
     @PostMapping("/raw")
@@ -85,47 +54,15 @@ public interface ExtractTestApi {
             @RequestBody ExtractTestRequest request
     );
 
-    @Operation(
-            summary = "파라미터 추출 + DB 저장 테스트",
-            description = "자연어 입력에서 공정 파라미터를 추출하고 parameters 테이블에 저장합니다. "
-                    + "테스트용 세션과 메시지를 자동 생성하여 전체 저장 플로우를 검증합니다."
-    )
+    @Operation(summary = "추출 + 저장 테스트", description = "테스트용 메시지를 저장하고 첫 검증 스냅샷까지 생성합니다.")
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "추출 및 DB 저장 성공",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ParametersResponse.class),
-                            examples = @ExampleObject(value = """
-                                    {
-                                      "requestId": "550e8400-e29b-41d4-a716-446655440000",
-                                      "messageId": 10,
-                                      "pressureMtorr": 50.0,
-                                      "sourcePowerW": 800.0,
-                                      "biasPowerW": 100.0,
-                                      "currentEr": null
-                                    }
-                                    """))
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "추출 검증 실패 (UNSUPPORTED 또는 INVALID_FIELD)",
-                    content = @Content(mediaType = "application/json",
-                            examples = @ExampleObject(value = """
-                                    { "message": "Some parameters could not be extracted properly. [pressure: MISSING]" }
-                                    """))
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "AI 서버 통신 오류",
-                    content = @Content(mediaType = "application/json",
-                            examples = @ExampleObject(value = """
-                                    { "message": "AI server error: Connection refused" }
-                                    """))
-            )
+            @ApiResponse(responseCode = "200", description = "추출 및 저장 성공",
+                    content = @Content(schema = @Schema(implementation = ParameterValidationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "입력 검증 실패"),
+            @ApiResponse(responseCode = "500", description = "AI 서버 통신 오류")
     })
     @PostMapping("/save")
-    ResponseEntity<ParametersResponse> extractAndSave(
+    ResponseEntity<ParameterValidationResponse> extractAndSave(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "자연어 공정 분석 요청",
                     required = true,
@@ -140,42 +77,17 @@ public interface ExtractTestApi {
             @RequestBody ExtractTestRequest request
     );
 
-    @Operation(
-            summary = "저장된 파라미터 단건 조회",
-            description = "DB에 저장된 Parameters를 requestId로 조회합니다."
-    )
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "조회 성공",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ParametersResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "해당 requestId의 파라미터가 존재하지 않음"
-            )
-    })
-    @GetMapping("/results/{requestId}")
-    ResponseEntity<ParametersResponse> getParameters(
-            @Parameter(description = "요청 ID (UUID)", example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String requestId
+    @Operation(summary = "검증 결과 단건 조회", description = "validationId로 저장된 검증 결과를 조회합니다.")
+    @GetMapping("/results/{validationId}")
+    ResponseEntity<ParameterValidationResponse> getValidation(
+            @Parameter(description = "검증 결과 ID", example = "21")
+            @PathVariable("validationId") Long validationId
     );
 
-    @Operation(
-            summary = "메시지별 파라미터 조회",
-            description = "특정 채팅 메시지에 연결된 파라미터 목록을 조회합니다."
-    )
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "조회 성공",
-                    content = @Content(mediaType = "application/json")
-            )
-    })
+    @Operation(summary = "메시지별 검증 이력 조회", description = "특정 메시지에 연결된 모든 검증 이력을 조회합니다.")
     @GetMapping("/results/message/{messageId}")
-    ResponseEntity<List<ParametersResponse>> getParametersByMessageId(
+    ResponseEntity<List<ParameterValidationResponse>> getValidationsByMessageId(
             @Parameter(description = "ChatMessage ID", example = "10")
-            @PathVariable Long messageId
+            @PathVariable("messageId") Long messageId
     );
 }

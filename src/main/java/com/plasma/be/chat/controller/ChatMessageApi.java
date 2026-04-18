@@ -4,7 +4,8 @@ import com.plasma.be.chat.dto.ChatMessageCreateRequest;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionsEndRequest;
-import com.plasma.be.extract.dto.ParametersResponse;
+import com.plasma.be.extract.dto.ParameterValidationRequest;
+import com.plasma.be.extract.dto.ParameterValidationResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -23,51 +24,58 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.util.List;
 
-@Tag(name = "Chat Messages", description = "채팅 메시지 생성·조회 및 세션 관리 API. 메시지 생성 시 AI 서버를 통해 공정 파라미터를 자동 추출합니다.")
+@Tag(name = "Chat Messages", description = "채팅 메시지 저장, 파라미터 추출/재검증, 세션 조회 API")
 @RequestMapping("/api/chat/messages")
 public interface ChatMessageApi {
 
     @Operation(
-            summary = "메시지 생성 및 파라미터 추출",
-            description = "사용자의 자연어 입력을 채팅 메시지로 저장한 뒤, AI 서버를 통해 공정 파라미터(pressure, source_power, bias_power)를 추출하여 반환합니다. "
-                    + "추출 결과는 parameters 테이블에 저장됩니다."
+            summary = "메시지 생성 및 첫 추출 실행",
+            description = "사용자의 자연어 입력을 저장하고 AI 추출 결과를 첫 검증 스냅샷으로 남깁니다. "
+                    + "INVALID_FIELD도 200 응답으로 내려 프론트가 재입력 카드를 띄울 수 있게 합니다."
     )
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "메시지 저장 및 파라미터 추출 성공",
+                    description = "메시지 저장 및 첫 검증 완료",
                     content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ParametersResponse.class),
+                            schema = @Schema(implementation = ChatMessageSummaryResponse.class),
                             examples = @ExampleObject(value = """
                                     {
-                                      "requestId": "550e8400-e29b-41d4-a716-446655440000",
                                       "messageId": 10,
-                                      "pressureMtorr": 50.0,
-                                      "sourcePowerW": 800.0,
-                                      "biasPowerW": 100.0,
-                                      "currentEr": null
+                                      "sessionId": "session-001",
+                                      "role": "USER",
+                                      "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 조건에서 식각률 예측해줘",
+                                      "createdAt": "2026-04-18T15:30:00",
+                                      "validations": [
+                                        {
+                                          "validationId": 21,
+                                          "requestId": "550e8400-e29b-41d4-a716-446655440000",
+                                          "messageId": 10,
+                                          "attemptNo": 1,
+                                          "sourceType": "AI_EXTRACT",
+                                          "validationStatus": "INVALID_FIELD",
+                                          "processType": "ETCH",
+                                          "taskType": "PREDICTION",
+                                          "parameters": [
+                                            { "key": "pressure", "label": "Pressure", "value": null, "unit": "mTorr", "status": "MISSING" },
+                                            { "key": "source_power", "label": "Source Power", "value": 800.0, "unit": "W", "status": "VALID" },
+                                            { "key": "bias_power", "label": "Bias Power", "value": 100.0, "unit": "W", "status": "VALID" }
+                                          ],
+                                          "currentEr": null,
+                                          "allValid": false,
+                                          "confirmed": false,
+                                          "failureReason": null,
+                                          "createdAt": "2026-04-18T15:30:02"
+                                        }
+                                      ]
                                     }
                                     """))
             ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "입력 검증 실패 또는 파라미터 추출 검증 실패",
-                    content = @Content(mediaType = "application/json",
-                            examples = @ExampleObject(value = """
-                                    { "message": "inputText is required." }
-                                    """))
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "AI 서버 통신 오류",
-                    content = @Content(mediaType = "application/json",
-                            examples = @ExampleObject(value = """
-                                    { "message": "AI server error: Connection refused" }
-                                    """))
-            )
+            @ApiResponse(responseCode = "400", description = "입력 검증 실패"),
+            @ApiResponse(responseCode = "500", description = "AI 서버 통신 오류")
     })
     @PostMapping
-    ResponseEntity<ParametersResponse> createMessage(
+    ResponseEntity<ChatMessageSummaryResponse> createMessage(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "자연어 공정 분석 요청. sessionId와 inputText는 필수입니다.",
                     required = true,
@@ -84,12 +92,58 @@ public interface ChatMessageApi {
             HttpSession browserSession
     );
 
+    @Operation(
+            summary = "수정된 파라미터 재검증",
+            description = "프론트에서 받은 수정 파라미터를 같은 메시지의 새 검증 시도로 저장합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "재검증 완료",
+                    content = @Content(schema = @Schema(implementation = ParameterValidationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "필수 파라미터 누락 또는 값 오류"),
+            @ApiResponse(responseCode = "404", description = "현재 브라우저에서 접근할 수 없는 메시지"),
+            @ApiResponse(responseCode = "500", description = "AI 서버 통신 오류")
+    })
+    @PostMapping("/{messageId}/validations")
+    ResponseEntity<ParameterValidationResponse> validateParameters(
+            @Parameter(description = "검증 대상 ChatMessage ID", example = "10")
+            @PathVariable("messageId") Long messageId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ParameterValidationRequest.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "parameters": [
+                                        { "key": "pressure", "value": 50.0, "unit": "mTorr" },
+                                        { "key": "source_power", "value": 800.0, "unit": "W" },
+                                        { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                      ]
+                                    }
+                                    """))
+            )
+            @RequestBody ParameterValidationRequest request,
+            HttpSession browserSession
+    );
+
+    @Operation(summary = "검증 결과 확정", description = "모든 파라미터가 VALID인 검증 결과를 최종 확정합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "확정 성공"),
+            @ApiResponse(responseCode = "400", description = "아직 모든 값이 VALID가 아님"),
+            @ApiResponse(responseCode = "404", description = "메시지 또는 검증 결과를 찾을 수 없음")
+    })
+    @PostMapping("/{messageId}/validations/{validationId}/confirm")
+    ResponseEntity<ParameterValidationResponse> confirmParameters(
+            @PathVariable("messageId") Long messageId,
+            @PathVariable("validationId") Long validationId,
+            HttpSession browserSession
+    );
+
     @Operation(summary = "세션 목록 조회", description = "활성 상태인 채팅 세션 목록을 최근 메시지 순으로 반환합니다.")
     @ApiResponse(responseCode = "200", description = "세션 목록 반환 성공")
     @GetMapping("/sessions")
     ResponseEntity<List<ChatSessionSummaryResponse>> getSessionList(HttpSession browserSession);
 
-    @Operation(summary = "세션별 메시지 조회", description = "특정 세션에 속한 모든 채팅 메시지를 생성 시간 순으로 반환합니다.")
+    @Operation(summary = "세션별 메시지 조회", description = "특정 세션에 속한 모든 메시지와 검증 이력을 생성 시간 순으로 반환합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "메시지 목록 반환 성공"),
             @ApiResponse(responseCode = "400", description = "sessionId 누락")
@@ -97,7 +151,7 @@ public interface ChatMessageApi {
     @GetMapping("/sessions/{sessionId}")
     ResponseEntity<List<ChatMessageSummaryResponse>> getMessageList(
             @Parameter(description = "조회할 세션 ID", example = "session-001")
-            @PathVariable String sessionId,
+            @PathVariable("sessionId") String sessionId,
             HttpSession browserSession
     );
 
@@ -106,7 +160,7 @@ public interface ChatMessageApi {
     @PostMapping("/sessions/{sessionId}/end")
     ResponseEntity<Void> endSession(
             @Parameter(description = "종료할 세션 ID", example = "session-001")
-            @PathVariable String sessionId,
+            @PathVariable("sessionId") String sessionId,
             HttpSession browserSession
     );
 

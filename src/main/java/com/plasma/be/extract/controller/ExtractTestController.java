@@ -1,21 +1,18 @@
 package com.plasma.be.extract.controller;
 
+import com.plasma.be.chat.dto.ChatMessageCreateRequest;
 import com.plasma.be.chat.entity.ChatMessage;
-import com.plasma.be.chat.entity.MessageRole;
-import com.plasma.be.chat.entity.Session;
-import com.plasma.be.chat.repository.ChatMessageRepository;
-import com.plasma.be.chat.repository.ChatSessionRepository;
+import com.plasma.be.chat.service.ChatMessageService;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.dto.ExtractTestRequest;
-import com.plasma.be.extract.dto.ParametersResponse;
+import com.plasma.be.extract.dto.ParameterValidationResponse;
 import com.plasma.be.extract.service.ExtractService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,17 +22,14 @@ public class ExtractTestController implements ExtractTestApi {
 
     private final ExtractClient extractClient;
     private final ExtractService extractService;
-    private final ChatSessionRepository chatSessionRepository;
-    private final ChatMessageRepository chatMessageRepository;
+    private final ChatMessageService chatMessageService;
 
     public ExtractTestController(ExtractClient extractClient,
                                  ExtractService extractService,
-                                 ChatSessionRepository chatSessionRepository,
-                                 ChatMessageRepository chatMessageRepository) {
+                                 ChatMessageService chatMessageService) {
         this.extractClient = extractClient;
         this.extractService = extractService;
-        this.chatSessionRepository = chatSessionRepository;
-        this.chatMessageRepository = chatMessageRepository;
+        this.chatMessageService = chatMessageService;
     }
 
     @Override
@@ -57,36 +51,26 @@ public class ExtractTestController implements ExtractTestApi {
     }
 
     @Override
-    public ResponseEntity<ParametersResponse> extractAndSave(ExtractTestRequest request) {
+    public ResponseEntity<ParameterValidationResponse> extractAndSave(ExtractTestRequest request) {
         validateInput(request);
-
-        // 테스트용 세션과 메시지를 생성한다.
         String testSessionId = "test-" + UUID.randomUUID().toString().substring(0, 8);
-        LocalDateTime now = LocalDateTime.now();
-
-        Session testSession = Session.create(testSessionId, "test-browser", request.userInput().trim(), now);
-        chatSessionRepository.save(testSession);
-
-        ChatMessage testMessage = new ChatMessage(testSession, MessageRole.USER, request.userInput().trim(), now);
-        chatMessageRepository.save(testMessage);
-        testSession.registerMessage(now);
-
-        // AI 추출 → DB 저장까지 전체 플로우를 실행한다.
-        ParametersResponse response = extractService.extractAndSave(testMessage);
-        return ResponseEntity.ok(response);
+        ChatMessage savedMessage = chatMessageService.saveMessage(
+                new ChatMessageCreateRequest(testSessionId, "USER", null, request.userInput().trim()),
+                "test-browser"
+        );
+        return ResponseEntity.ok(extractService.extractFromMessage(savedMessage.getMessageId()));
     }
 
     @Override
-    public ResponseEntity<ParametersResponse> getParameters(String requestId) {
-        return extractService.findById(requestId)
+    public ResponseEntity<ParameterValidationResponse> getValidation(Long validationId) {
+        return extractService.findByValidationId(validationId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @Override
-    public ResponseEntity<List<ParametersResponse>> getParametersByMessageId(Long messageId) {
-        List<ParametersResponse> results = extractService.findByMessageId(messageId);
-        return ResponseEntity.ok(results);
+    public ResponseEntity<List<ParameterValidationResponse>> getValidationsByMessageId(Long messageId) {
+        return ResponseEntity.ok(extractService.findByMessageId(messageId));
     }
 
     private void validateInput(ExtractTestRequest request) {
@@ -98,6 +82,11 @@ public class ExtractTestController implements ExtractTestApi {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgumentException(IllegalArgumentException e) {
         return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalStateException(IllegalStateException e) {
+        return ResponseEntity.internalServerError().body(Map.of("message", e.getMessage()));
     }
 
     @ExceptionHandler(RestClientException.class)

@@ -9,6 +9,7 @@ import com.plasma.be.chat.entity.Session;
 import com.plasma.be.chat.exception.SessionAccessDeniedException;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
+import com.plasma.be.extract.dto.ParameterValidationResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -74,17 +75,34 @@ public class ChatMessageService {
         assertSessionAccessible(sessionId.trim(), ownerSessionKey);
 
         return chatMessageRepository.findBySessionSessionIdAndSessionOwnerSessionKeyOrderByCreatedAtAsc(
-                        sessionId.trim(),
-                        ownerSessionKey
-                ).stream()
-                .map(message -> new ChatMessageSummaryResponse(
-                        message.getMessageId(),
-                        message.getSessionId(),
-                        message.getRole().name(),
-                        message.getInputText(),
-                        message.getCreatedAt()
-                ))
-                .toList();
+                sessionId.trim(),
+                ownerSessionKey
+        ).stream().map(message -> toResponse(message, List.of())).toList();
+    }
+
+    // 세션에 속한 메시지 엔티티를 그대로 조회한다.
+    @Transactional(readOnly = true)
+    public List<ChatMessage> findMessageEntitiesBySessionId(String sessionId, String ownerSessionKey) {
+        if (!StringUtils.hasText(sessionId)) {
+            throw new IllegalArgumentException("sessionId is required.");
+        }
+        validateOwnerSessionKey(ownerSessionKey);
+        assertSessionAccessible(sessionId.trim(), ownerSessionKey);
+        return chatMessageRepository.findBySessionSessionIdAndSessionOwnerSessionKeyOrderByCreatedAtAsc(
+                sessionId.trim(),
+                ownerSessionKey
+        );
+    }
+
+    // 현재 브라우저가 접근 가능한 단일 메시지를 조회한다.
+    @Transactional(readOnly = true)
+    public ChatMessage findOwnedMessage(Long messageId, String ownerSessionKey) {
+        if (messageId == null) {
+            throw new IllegalArgumentException("messageId is required.");
+        }
+        validateOwnerSessionKey(ownerSessionKey);
+        return chatMessageRepository.findByMessageIdAndSessionOwnerSessionKey(messageId, ownerSessionKey)
+                .orElseThrow(SessionAccessDeniedException::new);
     }
 
     // 단일 세션을 종료 처리해 더 이상 목록에 노출되지 않게 한다.
@@ -129,7 +147,7 @@ public class ChatMessageService {
         if (!StringUtils.hasText(request.sessionId())) {
             throw new IllegalArgumentException("sessionId is required.");
         }
-        if (!StringUtils.hasText(request.inputText())) {
+        if (!StringUtils.hasText(resolveInputText(request))) {
             throw new IllegalArgumentException("inputText is required.");
         }
         return true;
@@ -137,7 +155,19 @@ public class ChatMessageService {
 
     // 사용자 입력의 앞뒤 공백을 정리한다.
     private String normalizeInputText(ChatMessageCreateRequest request) {
-        return request.inputText().trim();
+        return resolveInputText(request).trim();
+    }
+
+    // 채팅 메시지와 검증 이력을 함께 응답 DTO로 변환한다.
+    public ChatMessageSummaryResponse toResponse(ChatMessage message, List<ParameterValidationResponse> validations) {
+        return new ChatMessageSummaryResponse(
+                message.getMessageId(),
+                message.getSessionId(),
+                message.getRole().name(),
+                message.getInputText(),
+                message.getCreatedAt(),
+                validations
+        );
     }
 
     private Session createOwnedSession(String sessionId,
@@ -160,6 +190,16 @@ public class ChatMessageService {
         if (!StringUtils.hasText(ownerSessionKey)) {
             throw new IllegalStateException("Browser session is required.");
         }
+    }
+
+    private String resolveInputText(ChatMessageCreateRequest request) {
+        if (request == null) {
+            return null;
+        }
+        if (StringUtils.hasText(request.inputText())) {
+            return request.inputText();
+        }
+        return request.content();
     }
 
     // 문자열 role 값을 enum으로 안전하게 변환한다.

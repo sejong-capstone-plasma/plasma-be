@@ -4,11 +4,11 @@ import com.plasma.be.chat.dto.ChatMessageCreateRequest;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionsEndRequest;
-import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.exception.SessionAccessDeniedException;
 import com.plasma.be.chat.service.ChatMessageService;
-import com.plasma.be.extract.dto.ParametersResponse;
-import com.plasma.be.extract.service.ExtractService;
+import com.plasma.be.chat.service.ChatWorkflowService;
+import com.plasma.be.extract.dto.ParameterValidationRequest;
+import com.plasma.be.extract.dto.ParameterValidationResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -17,23 +17,49 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 @RestController
 public class ChatMessageController implements ChatMessageApi {
 
     private final ChatMessageService chatMessageService;
-    private final ExtractService extractService;
+    private final ChatWorkflowService chatWorkflowService;
 
-    public ChatMessageController(ChatMessageService chatMessageService, ExtractService extractService) {
+    public ChatMessageController(ChatMessageService chatMessageService, ChatWorkflowService chatWorkflowService) {
         this.chatMessageService = chatMessageService;
-        this.extractService = extractService;
+        this.chatWorkflowService = chatWorkflowService;
     }
 
-    // 채팅 메시지를 저장하고 AI 추출 결과를 함께 반환한다.
+    // 사용자 메시지를 저장하고 첫 번째 파라미터 추출 결과를 함께 반환한다.
     @Override
-    public ResponseEntity<ParametersResponse> createMessage(ChatMessageCreateRequest request, HttpSession browserSession) {
-        ChatMessage savedMessage = chatMessageService.saveMessage(request, browserSession.getId());
-        ParametersResponse response = extractService.extractAndSave(savedMessage);
+    public ResponseEntity<ChatMessageSummaryResponse> createMessage(ChatMessageCreateRequest request, HttpSession browserSession) {
+        ChatMessageSummaryResponse response = chatWorkflowService.createMessageAndExtract(request, browserSession.getId());
+        return ResponseEntity.ok(response);
+    }
+
+    // 사용자가 수정한 파라미터를 기존 메시지에 다시 검증한다.
+    @Override
+    public ResponseEntity<ParameterValidationResponse> validateParameters(Long messageId,
+                                                                         ParameterValidationRequest request,
+                                                                         HttpSession browserSession) {
+        ParameterValidationResponse response = chatWorkflowService.validateCorrection(
+                messageId,
+                request,
+                browserSession.getId()
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    // 최종 검증 결과를 확정 상태로 저장한다.
+    @Override
+    public ResponseEntity<ParameterValidationResponse> confirmParameters(Long messageId,
+                                                                        Long validationId,
+                                                                        HttpSession browserSession) {
+        ParameterValidationResponse response = chatWorkflowService.confirmValidation(
+                messageId,
+                validationId,
+                browserSession.getId()
+        );
         return ResponseEntity.ok(response);
     }
 
@@ -43,10 +69,10 @@ public class ChatMessageController implements ChatMessageApi {
         return ResponseEntity.ok(chatMessageService.findSessions(browserSession.getId()));
     }
 
-    // 특정 세션에 속한 메시지 이력을 시간순으로 조회한다.
+    // 특정 세션에 속한 메시지와 검증 이력을 시간순으로 조회한다.
     @Override
     public ResponseEntity<List<ChatMessageSummaryResponse>> getMessageList(String sessionId, HttpSession browserSession) {
-        return ResponseEntity.ok(chatMessageService.findMessagesBySessionId(sessionId, browserSession.getId()));
+        return ResponseEntity.ok(chatWorkflowService.findMessagesWithValidations(sessionId, browserSession.getId()));
     }
 
     // 단일 세션을 종료 처리해 목록에서 숨긴다.
@@ -69,7 +95,19 @@ public class ChatMessageController implements ChatMessageApi {
         return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
     }
 
-    // 현재 브라우저에 속하지 않는 세션 접근은 404로 감춘다.
+    // 브라우저 세션이 없거나 AI 응답이 비정상인 경우 500 응답을 내려준다.
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalStateException(IllegalStateException exception) {
+        return ResponseEntity.internalServerError().body(Map.of("message", exception.getMessage()));
+    }
+
+    // 존재하지 않는 검증 결과 요청은 404로 응답한다.
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<Map<String, String>> handleNoSuchElementException(NoSuchElementException exception) {
+        return ResponseEntity.status(404).body(Map.of("message", exception.getMessage()));
+    }
+
+    // 현재 브라우저에 속하지 않는 세션이나 메시지 접근은 404로 감춘다.
     @ExceptionHandler(SessionAccessDeniedException.class)
     public ResponseEntity<Map<String, String>> handleSessionAccessDeniedException(SessionAccessDeniedException exception) {
         return ResponseEntity.status(404).body(Map.of("message", exception.getMessage()));

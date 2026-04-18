@@ -3,22 +3,29 @@ package com.plasma.be.extract.service;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.entity.Session;
+import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
-import com.plasma.be.extract.dto.ParametersResponse;
-import com.plasma.be.extract.entity.Parameters;
-import com.plasma.be.extract.repository.ParametersRepository;
+import com.plasma.be.extract.dto.ParameterInputRequest;
+import com.plasma.be.extract.dto.ParameterValidationRequest;
+import com.plasma.be.extract.dto.ParameterValidationResponse;
+import com.plasma.be.extract.entity.MessageValidationSnapshot;
+import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,107 +37,113 @@ class ExtractServiceTest {
     private ExtractClient extractClient;
 
     @Mock
-    private ParametersRepository parametersRepository;
+    private ChatMessageRepository chatMessageRepository;
+
+    @Mock
+    private MessageValidationSnapshotRepository snapshotRepository;
 
     @InjectMocks
     private ExtractService extractService;
 
-    // ── 정상 케이스 ──────────────────────────────────────────────────────────
+    @Test
+    void extractFromMessage_INVALID_FIELD도_응답으로_반환한다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(extractClient.requestExtraction(anyString())).thenReturn(invalidAiResponse());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ParameterValidationResponse response = extractService.extractFromMessage(1L);
+
+        assertThat(response.validationStatus()).isEqualTo("INVALID_FIELD");
+        assertThat(response.allValid()).isFalse();
+        assertThat(response.parameters()).hasSize(3);
+        assertThat(response.parameters().get(0).status()).isEqualTo("MISSING");
+        verify(snapshotRepository).save(any(MessageValidationSnapshot.class));
+    }
 
     @Test
-    void extractAndSave_성공() {
-        when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
-        when(parametersRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    void extractFromMessage_AI의_无표현은_빈값으로_정규화한다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(extractClient.requestExtraction(anyString())).thenReturn(aiResponseWithEmptyMarkers());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ParametersResponse response = extractService.extractAndSave(dummyChatMessage());
+        ParameterValidationResponse response = extractService.extractFromMessage(1L);
 
-        assertThat(response.requestId()).isEqualTo("req-001");
-        assertThat(response.pressureMtorr()).isEqualTo(50.0);
-        assertThat(response.sourcePowerW()).isEqualTo(800.0);
-        assertThat(response.biasPowerW()).isEqualTo(100.0);
+        assertThat(response.validationStatus()).isEqualTo("UNKNOWN");
+        assertThat(response.processType()).isNull();
+        assertThat(response.taskType()).isNull();
+        assertThat(response.parameters().get(0).unit()).isEqualTo("mTorr");
+        assertThat(response.parameters().get(0).status()).isEqualTo("MISSING");
         assertThat(response.currentEr()).isNull();
     }
 
     @Test
-    void extractAndSave_currentEr_포함() {
-        ExtractedParameterData aiResponse = new ExtractedParameterData(
-                "req-001", "VALID", "ETCH", "PREDICTION",
-                validProcessParams(),
-                new ExtractedParameterData.CurrentOutputs(
-                        new ExtractedParameterData.ValidatedParam(200.0, "Å/min", "VALID")
-                )
-        );
-        when(extractClient.requestExtraction(anyString())).thenReturn(aiResponse);
-        when(parametersRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        ParametersResponse response = extractService.extractAndSave(dummyChatMessage());
-
-        assertThat(response.currentEr()).isEqualTo(200.0);
-    }
-
-    @Test
-    void extractAndSave_결과가_DB에_저장됨() {
+    void validateCorrection_사용자입력값을_기반으로_재검증한다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
         when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
-        when(parametersRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        extractService.extractAndSave(dummyChatMessage());
+        ParameterValidationRequest request = new ParameterValidationRequest(List.of(
+                new ParameterInputRequest("pressure", 50.0, "mTorr"),
+                new ParameterInputRequest("source_power", 800.0, "W"),
+                new ParameterInputRequest("bias_power", 100.0, "W")
+        ));
 
-        verify(parametersRepository).save(any(Parameters.class));
+        ParameterValidationResponse response = extractService.validateCorrection(1L, request);
+
+        assertThat(response.sourceType()).isEqualTo("USER_CORRECTION");
+        assertThat(response.allValid()).isTrue();
+        assertThat(response.parameters()).allMatch(parameter -> "VALID".equals(parameter.status()));
     }
 
-    // ── validateExtractedData ────────────────────────────────────────────────
+    @Test
+    void validateCorrection_AI가_UNSUPPORTED를_주더라도_수정값이_모두_VALID면_성공으로_본다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(extractClient.requestExtraction(anyString())).thenReturn(unsupportedButAllParamsValidResponse());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ParameterValidationRequest request = new ParameterValidationRequest(List.of(
+                new ParameterInputRequest("pressure", 50.0, "mTorr"),
+                new ParameterInputRequest("source_power", 800.0, "W"),
+                new ParameterInputRequest("bias_power", 100.0, "W")
+        ));
+
+        ParameterValidationResponse response = extractService.validateCorrection(1L, request);
+
+        assertThat(response.sourceType()).isEqualTo("USER_CORRECTION");
+        assertThat(response.validationStatus()).isEqualTo("VALID");
+        assertThat(response.allValid()).isTrue();
+        assertThat(response.parameters()).allMatch(parameter -> "VALID".equals(parameter.status()));
+    }
 
     @Test
-    void validateExtractedData_UNSUPPORTED이면_예외() {
-        ExtractedParameterData data = new ExtractedParameterData(
-                "req-001", "UNSUPPORTED", "UNKNOWN", "UNSUPPORTED", null, null
-        );
+    void validateCorrection_파라미터가_빠지면_예외() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        ParameterValidationRequest request = new ParameterValidationRequest(List.of(
+                new ParameterInputRequest("pressure", 50.0, "mTorr")
+        ));
 
-        assertThatThrownBy(() -> extractService.validateExtractedData(data))
+        assertThatThrownBy(() -> extractService.validateCorrection(1L, request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Unsupported");
+                .hasMessageContaining("missing parameters");
     }
 
     @Test
-    void validateExtractedData_INVALID_FIELD이면_예외() {
-        ExtractedParameterData data = new ExtractedParameterData(
-                "req-001", "INVALID_FIELD", "ETCH", "PREDICTION",
-                new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(null, null, "MISSING"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
-                ),
-                null
-        );
+    void extractFromMessage_AI오류시_실패스냅샷을_남기고_예외를_던진다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(extractClient.requestExtraction(anyString())).thenThrow(new RestClientException("Connection refused"));
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThatThrownBy(() -> extractService.validateExtractedData(data))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("pressure")
-                .hasMessageContaining("MISSING");
+        assertThatThrownBy(() -> extractService.extractFromMessage(1L))
+                .isInstanceOf(RestClientException.class)
+                .hasMessageContaining("Connection refused");
+
+        verify(snapshotRepository).save(any(MessageValidationSnapshot.class));
     }
-
-    @Test
-    void validateExtractedData_null이면_예외() {
-        assertThatThrownBy(() -> extractService.validateExtractedData(null))
-                .isInstanceOf(IllegalStateException.class);
-    }
-
-    // ── createParameters ────────────────────────────────────────────────────
-
-    @Test
-    void createParameters_정상_매핑() {
-        ChatMessage message = dummyChatMessage();
-
-        Parameters result = extractService.createParameters(message, validAiResponse());
-
-        assertThat(result.getRequestId()).isEqualTo("req-001");
-        assertThat(result.getPressureMtorr()).isEqualTo(50.0);
-        assertThat(result.getSourcePowerW()).isEqualTo(800.0);
-        assertThat(result.getBiasPowerW()).isEqualTo(100.0);
-        assertThat(result.getCurrentEr()).isNull();
-    }
-
-    // ── 헬퍼 메서드 ───────────────────────────────────────────────────────────
 
     private ChatMessage dummyChatMessage() {
         Session session = Session.create("session-001", "browser-001", "테스트 세션", LocalDateTime.now());
@@ -140,16 +153,50 @@ class ExtractServiceTest {
     private ExtractedParameterData validAiResponse() {
         return new ExtractedParameterData(
                 "req-001", "VALID", "ETCH", "PREDICTION",
-                validProcessParams(),
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
                 null
         );
     }
 
-    private ExtractedParameterData.ProcessParams validProcessParams() {
-        return new ExtractedParameterData.ProcessParams(
-                new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
-                new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+    private ExtractedParameterData invalidAiResponse() {
+        return new ExtractedParameterData(
+                "req-002", "INVALID_FIELD", "ETCH", "PREDICTION",
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(null, "mTorr", "MISSING"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                null
+        );
+    }
+
+    private ExtractedParameterData aiResponseWithEmptyMarkers() {
+        return new ExtractedParameterData(
+                "无", "无", "无", "无",
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(null, "无", "无"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                new ExtractedParameterData.CurrentOutputs(
+                        new ExtractedParameterData.ValidatedParam(null, "无", "无")
+                )
+        );
+    }
+
+    private ExtractedParameterData unsupportedButAllParamsValidResponse() {
+        return new ExtractedParameterData(
+                "req-unsupported", "UNSUPPORTED", null, null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                null
         );
     }
 }

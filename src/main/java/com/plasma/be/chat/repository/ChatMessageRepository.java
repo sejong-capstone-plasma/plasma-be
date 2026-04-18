@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 // 채팅 메시지 조회와 저장을 담당하는 JPA 레포지토리
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
@@ -13,4 +14,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     @EntityGraph(attributePaths = "session")
     List<ChatMessage> findBySessionSessionIdAndSessionOwnerSessionKeyOrderByCreatedAtAsc(String sessionId,
                                                                                          String ownerSessionKey);
+
+    @EntityGraph(attributePaths = "session")
+    Optional<ChatMessage> findByMessageIdAndSessionOwnerSessionKey(Long messageId, String ownerSessionKey);
 }
