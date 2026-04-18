@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plasma Chat Workflow Test</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f2eee6;
+            --panel: rgba(255, 251, 245, 0.95);
+            --panel-strong: #fff7ee;
+            --sidebar: #e8ddce;
+            --sidebar-strong: #dbc8b1;
+            --line: #ccb79b;
+            --text: #2b2418;
+            --muted: #746554;
+            --accent: #155b52;
+            --accent-strong: #0e463f;
+            --user: #ead5bd;
+            --system: #f1e8db;
+            --card: #fffaf4;
+            --warn: #9d4d1d;
+            --warn-soft: #f7e1d2;
+            --error: #9a2f2f;
+            --error-soft: #fde4e4;
+            --success: #22624c;
+            --success-soft: #dff2e8;
+            --shadow: 0 24px 70px rgba(75, 53, 20, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", sans-serif;
+            color: var(--text);
+            background:
+                    radial-gradient(circle at top left, rgba(21, 91, 82, 0.16), transparent 28%),
+                    radial-gradient(circle at top right, rgba(157, 77, 29, 0.14), transparent 32%),
+                    linear-gradient(180deg, #faf7f2 0%, var(--bg) 100%);
+        }
+
+        .shell {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 28px;
+        }
+
+        .layout {
+            min-height: calc(100vh - 56px);
+            display: grid;
+            grid-template-columns: 320px minmax(0, 1fr);
+            background: rgba(255, 250, 244, 0.82);
+            border: 1px solid rgba(204, 183, 155, 0.65);
+            border-radius: 28px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(12px);
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            background:
+                    linear-gradient(180deg, rgba(232, 221, 206, 0.96) 0%, rgba(220, 204, 183, 0.94) 100%);
+            border-right: 1px solid rgba(204, 183, 155, 0.7);
+        }
+
+        .sidebar-head {
+            padding: 22px;
+            border-bottom: 1px solid rgba(204, 183, 155, 0.7);
+        }
+
+        .eyebrow {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(21, 91, 82, 0.12);
+            color: var(--accent-strong);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .sidebar-head h2,
+        .panel-head h1 {
+            margin: 14px 0 0;
+            line-height: 1.1;
+            letter-spacing: -0.04em;
+        }
+
+        .sidebar-head h2 {
+            font-size: 28px;
+        }
+
+        .sidebar-head p,
+        .panel-head p {
+            margin: 10px 0 0;
+            color: var(--muted);
+            line-height: 1.55;
+            font-size: 14px;
+        }
+
+        .new-chat {
+            margin-top: 18px;
+            width: 100%;
+        }
+
+        .history-list {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            width: 100%;
+            padding: 15px 16px;
+            border: 1px solid transparent;
+            border-radius: 18px;
+            background: rgba(255, 250, 245, 0.72);
+            color: inherit;
+            text-align: left;
+            cursor: pointer;
+            transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+        }
+
+        .history-item:hover {
+            transform: translateY(-1px);
+            border-color: rgba(21, 91, 82, 0.2);
+        }
+
+        .history-item.active {
+            border-color: rgba(21, 91, 82, 0.48);
+            background: rgba(255, 247, 236, 0.95);
+            box-shadow: inset 0 0 0 1px rgba(21, 91, 82, 0.08);
+        }
+
+        .history-title {
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.45;
+        }
+
+        .history-meta {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .history-empty {
+            padding: 18px;
+            border-radius: 18px;
+            background: rgba(255, 249, 241, 0.78);
+            color: var(--muted);
+            line-height: 1.5;
+            font-size: 13px;
+        }
+
+        .panel {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .panel-head {
+            padding: 24px 28px 18px;
+            border-bottom: 1px solid rgba(204, 183, 155, 0.7);
+        }
+
+        .panel-head h1 {
+            font-size: 34px;
+        }
+
+        .session-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .pill {
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(21, 91, 82, 0.1);
+            color: var(--accent-strong);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .timeline {
+            flex: 1;
+            overflow-y: auto;
+            padding: 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .welcome {
+            padding: 18px 20px;
+            border-radius: 20px;
+            background: var(--system);
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .message-block {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message-row {
+            display: flex;
+        }
+
+        .message-row.user {
+            justify-content: flex-end;
+        }
+
+        .bubble {
+            max-width: min(82%, 760px);
+            padding: 15px 18px;
+            border-radius: 22px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+            box-shadow: 0 12px 30px rgba(87, 62, 26, 0.07);
+        }
+
+        .bubble.user {
+            background: linear-gradient(180deg, #ecd8c1 0%, var(--user) 100%);
+        }
+
+        .bubble.system {
+            background: var(--system);
+            color: var(--muted);
+        }
+
+        .bubble-meta {
+            margin-top: 8px;
+            font-size: 12px;
+            color: rgba(43, 36, 24, 0.56);
+        }
+
+        .validation-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 860px;
+        }
+
+        .validation-card {
+            padding: 18px;
+            border-radius: 22px;
+            background: var(--card);
+            border: 1px solid rgba(204, 183, 155, 0.7);
+            box-shadow: 0 12px 34px rgba(75, 53, 20, 0.08);
+        }
+
+        .validation-card.invalid {
+            background: linear-gradient(180deg, #fff8f1 0%, var(--warn-soft) 100%);
+            border-color: rgba(157, 77, 29, 0.28);
+        }
+
+        .validation-card.error {
+            background: linear-gradient(180deg, #fff9f9 0%, var(--error-soft) 100%);
+            border-color: rgba(154, 47, 47, 0.3);
+        }
+
+        .validation-card.valid {
+            background: linear-gradient(180deg, #fbfffc 0%, var(--success-soft) 100%);
+            border-color: rgba(34, 98, 76, 0.28);
+        }
+
+        .card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .card-subtitle {
+            margin-top: 6px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .status-chip {
+            padding: 8px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            background: rgba(21, 91, 82, 0.12);
+            color: var(--accent-strong);
+        }
+
+        .status-chip.invalid {
+            background: rgba(157, 77, 29, 0.16);
+            color: var(--warn);
+        }
+
+        .status-chip.error {
+            background: rgba(154, 47, 47, 0.16);
+            color: var(--error);
+        }
+
+        .status-chip.valid {
+            background: rgba(34, 98, 76, 0.16);
+            color: var(--success);
+        }
+
+        .param-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .param-box {
+            padding: 14px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(204, 183, 155, 0.7);
+        }
+
+        .param-box.invalid {
+            border-color: rgba(157, 77, 29, 0.45);
+            background: rgba(255, 244, 235, 0.9);
+        }
+
+        .param-label {
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .param-value {
+            margin-top: 10px;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.04em;
+        }
+
+        .param-unit {
+            margin-left: 6px;
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .param-status {
+            margin-top: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        .failure-reason {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .editor {
+            margin-top: 18px;
+            padding-top: 18px;
+            border-top: 1px dashed rgba(204, 183, 155, 0.9);
+        }
+
+        .editor-title {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .editor-grid {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .field label {
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .field input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(204, 183, 155, 0.85);
+            background: rgba(255, 255, 255, 0.92);
+            color: var(--text);
+            font: inherit;
+        }
+
+        .field input.invalid {
+            border-color: rgba(154, 47, 47, 0.48);
+            background: rgba(255, 245, 245, 0.95);
+        }
+
+        .editor-actions {
+            margin-top: 14px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .composer {
+            padding: 20px 28px 28px;
+            border-top: 1px solid rgba(204, 183, 155, 0.7);
+            display: grid;
+            gap: 14px;
+            background: rgba(255, 251, 245, 0.75);
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            resize: vertical;
+            padding: 16px 18px;
+            border-radius: 18px;
+            border: 1px solid rgba(204, 183, 155, 0.9);
+            background: rgba(255, 255, 255, 0.94);
+            color: var(--text);
+            font: inherit;
+            line-height: 1.6;
+        }
+
+        textarea:focus,
+        .field input:focus {
+            outline: 2px solid rgba(21, 91, 82, 0.16);
+            border-color: rgba(21, 91, 82, 0.6);
+        }
+
+        .composer-actions {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        button {
+            border: 0;
+            border-radius: 999px;
+            padding: 12px 18px;
+            background: var(--accent);
+            color: white;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: rgba(21, 91, 82, 0.12);
+            color: var(--accent-strong);
+        }
+
+        button.warn {
+            background: var(--warn);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        @media (max-width: 1080px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                border-right: 0;
+                border-bottom: 1px solid rgba(204, 183, 155, 0.7);
+            }
+        }
+
+        @media (max-width: 760px) {
+            .shell {
+                padding: 0;
+            }
+
+            .layout {
+                min-height: 100vh;
+                border-radius: 0;
+            }
+
+            .param-grid,
+            .editor-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .composer-actions,
+            .editor-actions,
+            .card-head {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .bubble {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-head">
+                <span class="eyebrow">History</span>
+                <h2>대화 기록</h2>
+                <p>채팅방별로 저장된 원문 메시지와 검증 시도 이력을 다시 확인할 수 있습니다.</p>
+                <button id="newChatButton" class="new-chat" type="button">새 채팅 시작</button>
+            </div>
+            <div id="historyList" class="history-list"></div>
+        </aside>
+
+        <main class="panel">
+            <div class="panel-head">
+                <span class="eyebrow">Workflow</span>
+                <h1>Plasma Parameter Loop</h1>
+                <p>사용자 원문을 먼저 저장하고, AI 추출 결과를 검증 카드로 표시합니다. 값이 부족하면 바로 같은 메시지 아래에서 재입력과 재검증을 반복할 수 있습니다.</p>
+                <div class="session-strip">
+                    <div class="pill">작성 세션: <span id="draftSessionId"></span></div>
+                    <div class="pill">현재 보고 있는 세션: <span id="viewSessionId"></span></div>
+                </div>
+            </div>
+
+            <section id="timeline" class="timeline"></section>
+
+            <div class="composer">
+                <textarea id="inputText" placeholder="예시: 압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 조건에서 식각률 예측해줘"></textarea>
+                <div class="composer-actions">
+                    <div class="hint">메시지는 항상 먼저 저장됩니다. 추출이 실패하거나 값이 부족해도 이전 기록에서 다시 확인할 수 있습니다.</div>
+                    <button id="sendButton" type="button">메시지 저장 후 추출</button>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+    const storageKey = "plasma-chat-workflow-session-id";
+    let draftSessionId = getOrCreateSessionId();
+    let viewedSessionId = draftSessionId;
+    let busy = false;
+
+    const historyListEl = document.getElementById("historyList");
+    const timelineEl = document.getElementById("timeline");
+    const inputEl = document.getElementById("inputText");
+    const sendButtonEl = document.getElementById("sendButton");
+    const newChatButtonEl = document.getElementById("newChatButton");
+    const draftSessionIdEl = document.getElementById("draftSessionId");
+    const viewSessionIdEl = document.getElementById("viewSessionId");
+
+    syncSessionLabels();
+    sendButtonEl.addEventListener("click", submitMessage);
+    newChatButtonEl.addEventListener("click", startNewChat);
+    inputEl.addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            submitMessage();
+        }
+    });
+
+    initialize();
+
+    async function initialize() {
+        renderWelcome();
+        await refreshHistory();
+        await loadSessionMessages(viewedSessionId, { allowEmpty: true, allowMissing: true });
+        inputEl.focus();
+    }
+
+    async function submitMessage() {
+        const inputText = inputEl.value.trim();
+        if (!inputText || busy) {
+            return;
+        }
+
+        busy = true;
+        sendButtonEl.disabled = true;
+
+        try {
+            viewedSessionId = draftSessionId;
+            syncSessionLabels();
+
+            const response = await fetch("/api/chat/messages", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    sessionId: draftSessionId,
+                    role: "USER",
+                    inputText
+                })
+            });
+
+            const payload = await readJson(response);
+            if (!response.ok) {
+                throw new Error(payload.message || "메시지 처리에 실패했습니다.");
+            }
+
+            inputEl.value = "";
+            await refreshHistory();
+            await loadSessionMessages(draftSessionId, { allowEmpty: false });
+        } catch (error) {
+            appendSystemMessage(error.message || "요청 처리 중 오류가 발생했습니다.");
+        } finally {
+            busy = false;
+            sendButtonEl.disabled = false;
+            inputEl.focus();
+        }
+    }
+
+    async function refreshHistory() {
+        const response = await fetch("/api/chat/messages/sessions");
+        const sessions = await readJson(response);
+
+        historyListEl.innerHTML = "";
+        if (!Array.isArray(sessions) || sessions.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "history-empty";
+            empty.textContent = "저장된 채팅 세션이 아직 없습니다. 첫 메시지를 보내면 이곳에 쌓입니다.";
+            historyListEl.appendChild(empty);
+            return;
+        }
+
+        sessions.forEach((session) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "history-item" + (session.sessionId === viewedSessionId ? " active" : "");
+
+            const title = document.createElement("div");
+            title.className = "history-title";
+            title.textContent = session.title || "제목 없음";
+
+            const meta = document.createElement("div");
+            meta.className = "history-meta";
+            meta.textContent = `${formatDate(session.lastMessageAt)} · ${session.messageCount} messages`;
+
+            button.appendChild(title);
+            button.appendChild(meta);
+            button.addEventListener("click", async () => {
+                viewedSessionId = session.sessionId;
+                syncSessionLabels();
+                await loadSessionMessages(viewedSessionId, { allowEmpty: false });
+                await refreshHistory();
+            });
+
+            historyListEl.appendChild(button);
+        });
+    }
+
+    async function loadSessionMessages(sessionId, options = { allowEmpty: false, allowMissing: false }) {
+        if (!sessionId) {
+            renderWelcome();
+            return;
+        }
+
+        const response = await fetch("/api/chat/messages/sessions/" + encodeURIComponent(sessionId));
+        if (!response.ok) {
+            if (response.status === 404 && options.allowMissing) {
+                renderWelcome();
+                return;
+            }
+            const payload = await readJson(response);
+            appendSystemMessage(payload.message || "세션을 불러오지 못했습니다.");
+            return;
+        }
+
+        const messages = await readJson(response);
+        timelineEl.innerHTML = "";
+
+        if (!Array.isArray(messages) || messages.length === 0) {
+            if (options.allowEmpty) {
+                renderWelcome();
+            } else {
+                appendSystemMessage("이 세션에는 아직 저장된 메시지가 없습니다.");
+            }
+            return;
+        }
+
+        messages.forEach((message) => renderMessageBlock(message));
+        timelineEl.scrollTop = timelineEl.scrollHeight;
+    }
+
+    function renderWelcome() {
+        timelineEl.innerHTML = "";
+        const node = document.createElement("div");
+        node.className = "welcome";
+        node.textContent = "새 메시지를 보내면 사용자 원문이 먼저 저장되고, 그 아래에 AI 추출 결과와 검증 카드가 이어집니다. 값이 부족하면 같은 카드에서 재입력 후 다시 검증할 수 있습니다.";
+        timelineEl.appendChild(node);
+    }
+
+    function renderMessageBlock(message) {
+        const block = document.createElement("div");
+        block.className = "message-block";
+
+        const row = document.createElement("div");
+        row.className = "message-row " + normalizeRole(message.role);
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble " + normalizeRole(message.role);
+        bubble.innerHTML = `
+            <div>${escapeHtml(message.inputText || "")}</div>
+            <div class="bubble-meta">${formatDate(message.createdAt)}</div>
+        `;
+        row.appendChild(bubble);
+        block.appendChild(row);
+
+        const validations = Array.isArray(message.validations) ? message.validations : [];
+        if (validations.length > 0) {
+            const stack = document.createElement("div");
+            stack.className = "validation-stack";
+            validations.forEach((validation, index) => {
+                stack.appendChild(createValidationCard(message, validation, index === validations.length - 1));
+            });
+            block.appendChild(stack);
+        }
+
+        timelineEl.appendChild(block);
+    }
+
+    function createValidationCard(message, validation, isLatest) {
+        const card = document.createElement("div");
+        card.className = "validation-card " + validationClass(validation);
+        const invalidParameters = (validation.parameters || []).filter((parameter) => !isParameterValid(parameter));
+        const hasInvalidParameters = invalidParameters.length > 0;
+
+        const statusClass = validationClass(validation);
+        const head = document.createElement("div");
+        head.className = "card-head";
+        head.innerHTML = `
+            <div>
+                <div class="card-title">${validationTitle(validation)}</div>
+                <div class="card-subtitle">시도 ${validation.attemptNo} · ${formatDate(validation.createdAt)} · ${validation.sourceType}</div>
+            </div>
+            <div class="status-chip ${statusClass}">${humanValidationStatus(validation)}</div>
+        `;
+        card.appendChild(head);
+
+        const grid = document.createElement("div");
+        grid.className = "param-grid";
+        (validation.parameters || []).forEach((parameter) => {
+            const box = document.createElement("div");
+            box.className = "param-box" + (!isParameterValid(parameter) ? " invalid" : "");
+            box.innerHTML = `
+                <div class="param-label">${escapeHtml(parameter.label || parameter.key)}</div>
+                <div class="param-value">${formatNumber(parameter.value)}<span class="param-unit">${escapeHtml(displayText(parameter.unit, ""))}</span></div>
+                <div class="param-status">${escapeHtml(normalizeStatus(parameter.status))}</div>
+            `;
+            grid.appendChild(box);
+        });
+        card.appendChild(grid);
+
+        if (validation.currentEr) {
+            const currentEr = document.createElement("div");
+            currentEr.className = "failure-reason";
+            currentEr.textContent = `Current ER: ${formatNumber(validation.currentEr.value)} ${displayText(validation.currentEr.unit, "")} · ${displayText(validation.currentEr.status, "UNKNOWN")}`;
+            card.appendChild(currentEr);
+        }
+
+        if (validation.failureReason) {
+            const reason = document.createElement("div");
+            reason.className = "failure-reason";
+            reason.textContent = validation.failureReason;
+            card.appendChild(reason);
+        }
+
+        if (validation.confirmed) {
+            const confirmed = document.createElement("div");
+            confirmed.className = "failure-reason";
+            confirmed.textContent = "이 검증 결과는 사용자가 확인을 완료한 상태입니다.";
+            card.appendChild(confirmed);
+            return card;
+        }
+
+        if (isLatest && validation.allValid) {
+            const editor = document.createElement("div");
+            editor.className = "editor";
+            editor.innerHTML = `
+                <div class="editor-title">모든 값이 VALID입니다. 확인 버튼을 누르면 이 결과를 다음 단계로 넘길 수 있습니다.</div>
+                <div class="editor-actions">
+                    <button type="button">이 값으로 확정</button>
+                </div>
+            `;
+            editor.querySelector("button").addEventListener("click", async () => {
+                await confirmValidation(message.messageId, validation.validationId);
+            });
+            card.appendChild(editor);
+            return card;
+        }
+
+        if (isLatest && hasInvalidParameters) {
+            card.appendChild(createEditor(message.messageId, validation));
+            return card;
+        }
+
+        if (isLatest && !validation.allValid) {
+            const notice = document.createElement("div");
+            notice.className = "failure-reason";
+            const invalidKeys = invalidParameters.map((parameter) => parameter.key).join(", ");
+            notice.textContent = invalidKeys
+                ? `다음 파라미터가 아직 유효하지 않아 재검증 카드가 표시됩니다: ${invalidKeys}`
+                : `개별 파라미터 값은 모두 채워졌지만 전체 검증 상태가 ${humanValidationStatus(validation)}라서 수정값 재검증 카드는 표시하지 않습니다.`;
+            card.appendChild(notice);
+        }
+
+        return card;
+    }
+
+    function createEditor(messageId, validation) {
+        const editor = document.createElement("div");
+        editor.className = "editor";
+
+        const title = document.createElement("div");
+        title.className = "editor-title";
+        title.textContent = "유효하지 않은 값이 있으면 수정하고 다시 검증하세요.";
+        editor.appendChild(title);
+
+        const grid = document.createElement("div");
+        grid.className = "editor-grid";
+
+        const inputs = new Map();
+        (validation.parameters || []).forEach((parameter) => {
+            const field = document.createElement("div");
+            field.className = "field";
+            const input = document.createElement("input");
+            input.type = "number";
+            input.step = "any";
+            input.value = parameter.value ?? "";
+            input.placeholder = parameter.unit || "";
+            if (!isParameterValid(parameter)) {
+                input.classList.add("invalid");
+            }
+
+            field.innerHTML = `<label>${escapeHtml(parameter.label)} (${escapeHtml(displayText(parameter.unit, ""))})</label>`;
+            field.appendChild(input);
+            grid.appendChild(field);
+            inputs.set(parameter.key, { input, unit: parameter.unit });
+        });
+
+        editor.appendChild(grid);
+
+        const actions = document.createElement("div");
+        actions.className = "editor-actions";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "warn";
+        button.textContent = "수정값 다시 검증";
+        actions.appendChild(button);
+        editor.appendChild(actions);
+
+        button.addEventListener("click", async () => {
+            if (busy) {
+                return;
+            }
+
+            const parameters = Array.from(inputs.entries()).map(([key, value]) => ({
+                key,
+                value: value.input.value === "" ? null : Number(value.input.value),
+                unit: value.unit
+            }));
+
+            busy = true;
+            button.disabled = true;
+            try {
+                const response = await fetch(`/api/chat/messages/${messageId}/validations`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ parameters })
+                });
+                const payload = await readJson(response);
+                if (!response.ok) {
+                    throw new Error(payload.message || "재검증에 실패했습니다.");
+                }
+                await refreshHistory();
+                await loadSessionMessages(viewedSessionId, { allowEmpty: false });
+            } catch (error) {
+                appendSystemMessage(error.message || "재검증 중 오류가 발생했습니다.");
+            } finally {
+                busy = false;
+                button.disabled = false;
+            }
+        });
+
+        return editor;
+    }
+
+    async function confirmValidation(messageId, validationId) {
+        if (busy) {
+            return;
+        }
+
+        busy = true;
+        try {
+            const response = await fetch(`/api/chat/messages/${messageId}/validations/${validationId}/confirm`, {
+                method: "POST"
+            });
+            const payload = await readJson(response);
+            if (!response.ok) {
+                throw new Error(payload.message || "확정 처리에 실패했습니다.");
+            }
+            await refreshHistory();
+            await loadSessionMessages(viewedSessionId, { allowEmpty: false });
+        } catch (error) {
+            appendSystemMessage(error.message || "확정 처리 중 오류가 발생했습니다.");
+        } finally {
+            busy = false;
+        }
+    }
+
+    async function startNewChat() {
+        draftSessionId = crypto.randomUUID();
+        viewedSessionId = draftSessionId;
+        sessionStorage.setItem(storageKey, draftSessionId);
+        syncSessionLabels();
+        renderWelcome();
+        inputEl.focus();
+        await refreshHistory();
+    }
+
+    function appendSystemMessage(text) {
+        const block = document.createElement("div");
+        block.className = "message-block";
+        const row = document.createElement("div");
+        row.className = "message-row";
+        const bubble = document.createElement("div");
+        bubble.className = "bubble system";
+        bubble.textContent = text;
+        row.appendChild(bubble);
+        block.appendChild(row);
+        timelineEl.appendChild(block);
+        timelineEl.scrollTop = timelineEl.scrollHeight;
+    }
+
+    function validationTitle(validation) {
+        if (validation.confirmed) {
+            return "확정된 파라미터 세트";
+        }
+        if (validation.sourceType === "USER_CORRECTION") {
+            return "사용자 수정값 재검증 결과";
+        }
+        return "초기 AI 추출 결과";
+    }
+
+    function validationClass(validation) {
+        if (validation.confirmed || validation.allValid) {
+            return "valid";
+        }
+        if (validation.validationStatus === "AI_ERROR") {
+            return "error";
+        }
+        return "invalid";
+    }
+
+    function humanValidationStatus(validation) {
+        if (validation.confirmed) {
+            return "CONFIRMED";
+        }
+        if (validation.allValid) {
+            return "ALL VALID";
+        }
+        return validation.validationStatus || "UNKNOWN";
+    }
+
+    function normalizeRole(role) {
+        const value = (role || "system").toLowerCase();
+        return value === "user" ? "user" : "system";
+    }
+
+    function syncSessionLabels() {
+        draftSessionIdEl.textContent = draftSessionId;
+        viewSessionIdEl.textContent = viewedSessionId;
+    }
+
+    function formatDate(value) {
+        if (!value) {
+            return "";
+        }
+        return new Date(value).toLocaleString("ko-KR", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit"
+        });
+    }
+
+    function formatNumber(value) {
+        if (value === null || value === undefined || Number.isNaN(value)) {
+            return "미입력";
+        }
+        return Number(value).toString();
+    }
+
+    function displayText(value, fallback = "") {
+        if (value === null || value === undefined) {
+            return fallback;
+        }
+
+        const text = String(value).trim();
+        if (!text) {
+            return fallback;
+        }
+
+        const normalized = text.toLowerCase();
+        if (normalized === "无" || normalized === "none" || normalized === "null" || normalized === "n/a" || normalized === "na") {
+            return fallback;
+        }
+
+        return text;
+    }
+
+    function normalizeStatus(value) {
+        return displayText(value, "UNKNOWN")
+            .replace(/[\s\u200B-\u200D\uFEFF]+/g, "")
+            .toUpperCase();
+    }
+
+    function isParameterValid(parameter) {
+        return normalizeStatus(parameter?.status) === "VALID";
+    }
+
+    function getOrCreateSessionId() {
+        const saved = sessionStorage.getItem(storageKey);
+        if (saved) {
+            return saved;
+        }
+        const created = crypto.randomUUID();
+        sessionStorage.setItem(storageKey, created);
+        return created;
+    }
+
+    async function readJson(response) {
+        const text = await response.text();
+        if (!text) {
+            return {};
+        }
+        try {
+            return JSON.parse(text);
+        } catch (error) {
+            return { message: text };
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;");
+    }
+</script>
+</body>
+</html>

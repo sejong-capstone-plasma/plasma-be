@@ -26,7 +26,6 @@ out/
 !**/src/main/**/out/
 !**/src/test/**/out/
 application-secret.yml
-src/main/resources/static/chat-test.html
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
