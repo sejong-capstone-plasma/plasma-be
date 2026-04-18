@@ -3,12 +3,11 @@ package com.plasma.be.extract.service;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.entity.Session;
-import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
-import com.plasma.be.extract.dto.ExtractionResponse;
-import com.plasma.be.extract.entity.ExtractionResult;
-import com.plasma.be.extract.repository.ExtractionResultRepository;
+import com.plasma.be.extract.dto.ParametersResponse;
+import com.plasma.be.extract.entity.Parameters;
+import com.plasma.be.extract.repository.ParametersRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -31,10 +30,7 @@ class ExtractServiceTest {
     private ExtractClient extractClient;
 
     @Mock
-    private ExtractionResultRepository extractionResultRepository;
-
-    @Mock
-    private ChatMessageRepository chatMessageRepository;
+    private ParametersRepository parametersRepository;
 
     @InjectMocks
     private ExtractService extractService;
@@ -42,24 +38,21 @@ class ExtractServiceTest {
     // ── 정상 케이스 ──────────────────────────────────────────────────────────
 
     @Test
-    void extractFromMessage_성공() {
+    void extractAndSave_성공() {
         when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
-        when(extractionResultRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(parametersRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ExtractionResponse response = extractService.extractFromMessage(dummyChatMessage());
+        ParametersResponse response = extractService.extractAndSave(dummyChatMessage());
 
-        assertThat(response.validationStatus()).isEqualTo("VALID");
-        assertThat(response.processType()).isEqualTo("ETCH");
-        assertThat(response.taskType()).isEqualTo("PREDICTION");
-        assertThat(response.processParams()).containsKey("pressure");
-        assertThat(response.processParams().get("pressure").value()).isEqualTo(50.0);
-        assertThat(response.processParams()).containsKey("source_power");
-        assertThat(response.processParams().get("source_power").value()).isEqualTo(800.0);
+        assertThat(response.requestId()).isEqualTo("req-001");
+        assertThat(response.pressureMtorr()).isEqualTo(50.0);
+        assertThat(response.sourcePowerW()).isEqualTo(800.0);
+        assertThat(response.biasPowerW()).isEqualTo(100.0);
         assertThat(response.currentEr()).isNull();
     }
 
     @Test
-    void extractFromMessage_currentEr_포함() {
+    void extractAndSave_currentEr_포함() {
         ExtractedParameterData aiResponse = new ExtractedParameterData(
                 "req-001", "VALID", "ETCH", "PREDICTION",
                 validProcessParams(),
@@ -68,23 +61,21 @@ class ExtractServiceTest {
                 )
         );
         when(extractClient.requestExtraction(anyString())).thenReturn(aiResponse);
-        when(extractionResultRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(parametersRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ExtractionResponse response = extractService.extractFromMessage(dummyChatMessage());
+        ParametersResponse response = extractService.extractAndSave(dummyChatMessage());
 
-        assertThat(response.currentEr()).isNotNull();
-        assertThat(response.currentEr().value()).isEqualTo(200.0);
-        assertThat(response.currentEr().unit()).isEqualTo("Å/min");
+        assertThat(response.currentEr()).isEqualTo(200.0);
     }
 
     @Test
-    void extractFromMessage_결과가_DB에_저장됨() {
+    void extractAndSave_결과가_DB에_저장됨() {
         when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
-        when(extractionResultRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(parametersRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        extractService.extractFromMessage(dummyChatMessage());
+        extractService.extractAndSave(dummyChatMessage());
 
-        verify(extractionResultRepository).save(any(ExtractionResult.class));
+        verify(parametersRepository).save(any(Parameters.class));
     }
 
     // ── validateExtractedData ────────────────────────────────────────────────
@@ -124,21 +115,18 @@ class ExtractServiceTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
-    // ── createExtractionResult ───────────────────────────────────────────────
+    // ── createParameters ────────────────────────────────────────────────────
 
     @Test
-    void createExtractionResult_processParams_정상_매핑() {
+    void createParameters_정상_매핑() {
         ChatMessage message = dummyChatMessage();
 
-        ExtractionResult result = extractService.createExtractionResult(message, validAiResponse());
+        Parameters result = extractService.createParameters(message, validAiResponse());
 
         assertThat(result.getRequestId()).isEqualTo("req-001");
-        assertThat(result.getTaskType()).isEqualTo("PREDICTION");
-        assertThat(result.getProcessType()).isEqualTo("ETCH");
-        assertThat(result.getProcessParams()).containsKey("pressure");
-        assertThat(result.getProcessParams().get("pressure").getValue()).isEqualTo(50.0);
-        assertThat(result.getProcessParams()).containsKey("source_power");
-        assertThat(result.getProcessParams()).containsKey("bias_power");
+        assertThat(result.getPressureMtorr()).isEqualTo(50.0);
+        assertThat(result.getSourcePowerW()).isEqualTo(800.0);
+        assertThat(result.getBiasPowerW()).isEqualTo(100.0);
         assertThat(result.getCurrentEr()).isNull();
     }
 

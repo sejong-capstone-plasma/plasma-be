@@ -4,7 +4,7 @@ import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
-import com.plasma.be.extract.repository.ExtractionResultRepository;
+import com.plasma.be.extract.repository.ParametersRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,14 +36,14 @@ class ChatMessageControllerTest {
     private ChatSessionRepository chatSessionRepository;
 
     @Autowired
-    private ExtractionResultRepository extractionResultRepository;
+    private ParametersRepository parametersRepository;
 
     @MockitoBean
     private ExtractClient extractClient;
 
     @BeforeEach
     void setUp() {
-        extractionResultRepository.deleteAll();
+        parametersRepository.deleteAll();
         chatMessageRepository.deleteAll();
         chatSessionRepository.deleteAll();
         when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
@@ -65,12 +65,9 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.requestId").exists())
-                .andExpect(jsonPath("$.validationStatus").value("VALID"))
-                .andExpect(jsonPath("$.processType").value("ETCH"))
-                .andExpect(jsonPath("$.taskType").value("PREDICTION"))
-                .andExpect(jsonPath("$.processParams.pressure.value").value(50.0))
-                .andExpect(jsonPath("$.processParams.source_power.value").value(800.0))
-                .andExpect(jsonPath("$.processParams.bias_power.value").value(100.0));
+                .andExpect(jsonPath("$.pressureMtorr").value(50.0))
+                .andExpect(jsonPath("$.sourcePowerW").value(800.0))
+                .andExpect(jsonPath("$.biasPowerW").value(100.0));
     }
 
     @Test
