@@ -7,7 +7,7 @@ import com.plasma.be.chat.dto.ChatSessionsEndRequest;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.exception.SessionAccessDeniedException;
 import com.plasma.be.chat.service.ChatMessageService;
-import com.plasma.be.extract.dto.ExtractionResponse;
+import com.plasma.be.extract.dto.ParametersResponse;
 import com.plasma.be.extract.service.ExtractService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
@@ -31,9 +31,9 @@ public class ChatMessageController implements ChatMessageApi {
 
     // 채팅 메시지를 저장하고 AI 추출 결과를 함께 반환한다.
     @Override
-    public ResponseEntity<ExtractionResponse> createMessage(ChatMessageCreateRequest request, HttpSession browserSession) {
+    public ResponseEntity<ParametersResponse> createMessage(ChatMessageCreateRequest request, HttpSession browserSession) {
         ChatMessage savedMessage = chatMessageService.saveMessage(request, browserSession.getId());
-        ExtractionResponse response = extractService.extractFromMessage(savedMessage);
+        ParametersResponse response = extractService.extractAndSave(savedMessage);
         return ResponseEntity.ok(response);
     }
 

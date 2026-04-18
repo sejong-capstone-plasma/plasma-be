@@ -1,25 +1,41 @@
 package com.plasma.be.extract.controller;
 
+import com.plasma.be.chat.entity.ChatMessage;
+import com.plasma.be.chat.entity.MessageRole;
+import com.plasma.be.chat.entity.Session;
+import com.plasma.be.chat.repository.ChatMessageRepository;
+import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.dto.ExtractTestRequest;
-import com.plasma.be.extract.dto.ExtractionResponse;
-import com.plasma.be.extract.entity.ProcessParameter;
+import com.plasma.be.extract.dto.ParametersResponse;
+import com.plasma.be.extract.service.ExtractService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
 
-import java.util.HashMap;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 public class ExtractTestController implements ExtractTestApi {
 
     private final ExtractClient extractClient;
+    private final ExtractService extractService;
+    private final ChatSessionRepository chatSessionRepository;
+    private final ChatMessageRepository chatMessageRepository;
 
-    public ExtractTestController(ExtractClient extractClient) {
+    public ExtractTestController(ExtractClient extractClient,
+                                 ExtractService extractService,
+                                 ChatSessionRepository chatSessionRepository,
+                                 ChatMessageRepository chatMessageRepository) {
         this.extractClient = extractClient;
+        this.extractService = extractService;
+        this.chatSessionRepository = chatSessionRepository;
+        this.chatMessageRepository = chatMessageRepository;
     }
 
     @Override
@@ -41,70 +57,41 @@ public class ExtractTestController implements ExtractTestApi {
     }
 
     @Override
-    public ResponseEntity<ExtractionResponse> extract(ExtractTestRequest request) {
+    public ResponseEntity<ParametersResponse> extractAndSave(ExtractTestRequest request) {
         validateInput(request);
-        ExtractedParameterData data = extractClient.requestExtraction(request.userInput().trim());
-        validateExtractedData(data);
-        return ResponseEntity.ok(toResponse(data));
+
+        // 테스트용 세션과 메시지를 생성한다.
+        String testSessionId = "test-" + UUID.randomUUID().toString().substring(0, 8);
+        LocalDateTime now = LocalDateTime.now();
+
+        Session testSession = Session.create(testSessionId, "test-browser", request.userInput().trim(), now);
+        chatSessionRepository.save(testSession);
+
+        ChatMessage testMessage = new ChatMessage(testSession, MessageRole.USER, request.userInput().trim(), now);
+        chatMessageRepository.save(testMessage);
+        testSession.registerMessage(now);
+
+        // AI 추출 → DB 저장까지 전체 플로우를 실행한다.
+        ParametersResponse response = extractService.extractAndSave(testMessage);
+        return ResponseEntity.ok(response);
+    }
+
+    @Override
+    public ResponseEntity<ParametersResponse> getParameters(String requestId) {
+        return extractService.findById(requestId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @Override
+    public ResponseEntity<List<ParametersResponse>> getParametersByMessageId(Long messageId) {
+        List<ParametersResponse> results = extractService.findByMessageId(messageId);
+        return ResponseEntity.ok(results);
     }
 
     private void validateInput(ExtractTestRequest request) {
         if (request == null || request.userInput() == null || request.userInput().isBlank()) {
             throw new IllegalArgumentException("userInput is required.");
-        }
-    }
-
-    private void validateExtractedData(ExtractedParameterData data) {
-        if ("UNSUPPORTED".equals(data.validationStatus())) {
-            throw new IllegalArgumentException(
-                    "Unsupported process or task type: processType=" + data.processType()
-                            + ", taskType=" + data.taskType());
-        }
-        if ("INVALID_FIELD".equals(data.validationStatus())) {
-            StringBuilder sb = new StringBuilder("Some parameters could not be extracted properly.");
-            if (data.processParams() != null) {
-                appendStatus(sb, "pressure", data.processParams().pressure());
-                appendStatus(sb, "source_power", data.processParams().sourcePower());
-                appendStatus(sb, "bias_power", data.processParams().biasPower());
-            }
-            throw new IllegalArgumentException(sb.toString());
-        }
-    }
-
-    private ExtractionResponse toResponse(ExtractedParameterData data) {
-        Map<String, ExtractionResponse.ProcessParamResponse> params = new HashMap<>();
-        if (data.processParams() != null) {
-            addParam(params, "pressure", data.processParams().pressure());
-            addParam(params, "source_power", data.processParams().sourcePower());
-            addParam(params, "bias_power", data.processParams().biasPower());
-        }
-
-        ExtractionResponse.ProcessParamResponse currentEr = null;
-        if (data.currentOutputs() != null && data.currentOutputs().etchRate() != null) {
-            var er = data.currentOutputs().etchRate();
-            currentEr = new ExtractionResponse.ProcessParamResponse(er.value(), er.unit(), er.status());
-        }
-
-        return new ExtractionResponse(
-                data.requestId(),
-                data.validationStatus(),
-                data.processType(),
-                data.taskType(),
-                params,
-                currentEr
-        );
-    }
-
-    private void addParam(Map<String, ExtractionResponse.ProcessParamResponse> params,
-                          String key, ExtractedParameterData.ValidatedParam param) {
-        if (param != null) {
-            params.put(key, new ExtractionResponse.ProcessParamResponse(param.value(), param.unit(), param.status()));
-        }
-    }
-
-    private void appendStatus(StringBuilder sb, String name, ExtractedParameterData.ValidatedParam param) {
-        if (param != null && !"VALID".equals(param.status())) {
-            sb.append(" [").append(name).append(": ").append(param.status()).append("]");
         }
     }
 

@@ -4,7 +4,7 @@ import com.plasma.be.chat.dto.ChatMessageCreateRequest;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionsEndRequest;
-import com.plasma.be.extract.dto.ExtractionResponse;
+import com.plasma.be.extract.dto.ParametersResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -30,25 +30,21 @@ public interface ChatMessageApi {
     @Operation(
             summary = "메시지 생성 및 파라미터 추출",
             description = "사용자의 자연어 입력을 채팅 메시지로 저장한 뒤, AI 서버를 통해 공정 파라미터(pressure, source_power, bias_power)를 추출하여 반환합니다. "
-                    + "추출 결과는 ExtractionResult로 DB에도 저장됩니다."
+                    + "추출 결과는 parameters 테이블에 저장됩니다."
     )
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
                     description = "메시지 저장 및 파라미터 추출 성공",
                     content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ExtractionResponse.class),
+                            schema = @Schema(implementation = ParametersResponse.class),
                             examples = @ExampleObject(value = """
                                     {
                                       "requestId": "550e8400-e29b-41d4-a716-446655440000",
-                                      "validationStatus": "VALID",
-                                      "processType": "ETCH",
-                                      "taskType": "PREDICTION",
-                                      "processParams": {
-                                        "pressure":     { "value": 50.0,  "unit": "mTorr", "status": "VALID" },
-                                        "source_power": { "value": 800.0, "unit": "W",     "status": "VALID" },
-                                        "bias_power":   { "value": 100.0, "unit": "W",     "status": "VALID" }
-                                      },
+                                      "messageId": 10,
+                                      "pressureMtorr": 50.0,
+                                      "sourcePowerW": 800.0,
+                                      "biasPowerW": 100.0,
                                       "currentEr": null
                                     }
                                     """))
@@ -71,7 +67,7 @@ public interface ChatMessageApi {
             )
     })
     @PostMapping
-    ResponseEntity<ExtractionResponse> createMessage(
+    ResponseEntity<ParametersResponse> createMessage(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "자연어 공정 분석 요청. sessionId와 inputText는 필수입니다.",
                     required = true,
