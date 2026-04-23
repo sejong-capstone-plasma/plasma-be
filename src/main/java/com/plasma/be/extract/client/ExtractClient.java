@@ -1,6 +1,7 @@
 package com.plasma.be.extract.client;
 
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -23,10 +24,10 @@ public class ExtractClient {
     private int lastResponseStatus;
 
     public ExtractClient(
-            RestClient extractRestClient,
+            @Qualifier("extractRestClient") RestClient restClient,
             @Value("${plasma.ai.base-url:http://localhost:8000}") String baseUrl,
             @Value("${plasma.ai.timeout-seconds:130}") int timeout) {
-        this.httpClient = extractRestClient;
+        this.httpClient = restClient;
         this.baseUrl = baseUrl;
         this.extractEndpoint = "/ai/services/extract-parameters";
         this.validateEndpoint = "/ai/services/extract-validate";

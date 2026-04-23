@@ -5,6 +5,7 @@ import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 
 public record ConfirmResponse(
         ParameterValidationResponse validation,
-        PredictPipelineResponse prediction
+        PredictPipelineResponse prediction,
+        String predictionError
 ) {
 }

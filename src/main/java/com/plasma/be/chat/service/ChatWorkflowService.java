@@ -11,6 +11,7 @@ import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.predict.dto.ConfirmResponse;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 
 import java.util.List;
 import java.util.Map;
@@ -74,23 +75,29 @@ public class ChatWorkflowService {
         ParameterValidationResponse validation = extractService.confirmValidation(messageId, validationId)
                 .orElseThrow(() -> new NoSuchElementException("validationId is not associated with the message."));
 
-        PredictPipelineResponse prediction = null;
-        if ("PREDICTION".equals(validation.taskType())) {
-            prediction = runPredictPipeline(message, validation);
+        if (!"PREDICTION".equals(validation.taskType())) {
+            return new ConfirmResponse(validation, null, null);
         }
 
-        return new ConfirmResponse(validation, prediction);
+        try {
+            PredictPipelineResponse prediction = runPredictPipeline(message, validation);
+            return new ConfirmResponse(validation, prediction, null);
+        } catch (RestClientException e) {
+            return new ConfirmResponse(validation, null, e.getMessage());
+        }
     }
 
     private PredictPipelineResponse runPredictPipeline(ChatMessage message,
                                                         ParameterValidationResponse validation) {
         Map<String, Double> paramValues = validation.parameters().stream()
+                .filter(p -> p.value() != null)
                 .collect(Collectors.toMap(ParameterFieldResponse::key, ParameterFieldResponse::value));
         Map<String, String> paramUnits = validation.parameters().stream()
+                .filter(p -> p.unit() != null)
                 .collect(Collectors.toMap(ParameterFieldResponse::key, ParameterFieldResponse::unit));
 
         return predictClient.requestPredictPipeline(
-                validation.processType(),
+                validation.processType() != null ? validation.processType() : "ETCH",
                 paramValues,
                 paramUnits,
                 message.getInputText()

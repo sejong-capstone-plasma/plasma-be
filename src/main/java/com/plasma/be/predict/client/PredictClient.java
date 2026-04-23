@@ -1,6 +1,7 @@
 package com.plasma.be.predict.client;
 
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -17,8 +18,8 @@ public class PredictClient {
 
     private final RestClient httpClient;
 
-    public PredictClient(RestClient extractRestClient) {
-        this.httpClient = extractRestClient;
+    public PredictClient(@Qualifier("extractRestClient") RestClient restClient) {
+        this.httpClient = restClient;
     }
 
     public PredictPipelineResponse requestPredictPipeline(String processType,
