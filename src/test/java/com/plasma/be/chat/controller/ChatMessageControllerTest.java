@@ -15,6 +15,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -92,9 +93,8 @@ class ChatMessageControllerTest {
     @Test
     void validateParameters_재검증_가능() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
-        when(extractClient.requestExtraction(anyString()))
-                .thenReturn(invalidAiResponse())
-                .thenReturn(validAiResponse());
+        when(extractClient.requestExtraction(anyString())).thenReturn(invalidAiResponse());
+        when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
 
         String body = mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)

@@ -100,10 +100,22 @@ public class ExtractService {
     public ParameterValidationResponse validateCorrection(Long messageId, ParameterValidationRequest request) {
         ChatMessage message = getManagedMessage(messageId);
         Map<String, SubmittedParam> submittedParams = normalizeSubmittedParams(request);
-        int attemptNo = nextAttemptNo(messageId);
+
+        Optional<MessageValidationSnapshot> latestSnapshot =
+                snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(messageId);
+        int attemptNo = latestSnapshot.map(s -> s.getAttemptNo() + 1).orElse(1);
+        String processType = latestSnapshot.map(MessageValidationSnapshot::getProcessType).orElse(null);
+        String taskType    = latestSnapshot.map(MessageValidationSnapshot::getTaskType).orElse(null);
+
+        Map<String, Double> paramValues = submittedParams.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().value()));
+        Map<String, String> paramUnits  = submittedParams.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        e -> sanitize(e.getValue().unit(), "")));
 
         try {
-            ExtractedParameterData data = requestToAiServer(buildValidationPrompt(message, submittedParams));
+            ExtractedParameterData data = extractClient.requestValidation(
+                    processType, taskType, paramValues, paramUnits);
             if (data == null) {
                 MessageValidationSnapshot failure = createFailureSnapshot(
                         message,
@@ -196,7 +208,7 @@ public class ExtractService {
         String validationStatus = sanitize(data.validationStatus(), "UNKNOWN");
         String requestId = sanitize(data.requestId(), UUID.randomUUID().toString());
 
-        ExtractedParameterData.ValidatedParam currentEr = null;
+        ExtractedParameterData.ValueWithUnit currentEr = null;
         if (data.currentOutputs() != null) {
             currentEr = data.currentOutputs().etchRate();
         }
@@ -239,7 +251,7 @@ public class ExtractService {
                 sanitize(data.taskType(), null),
                 currentEr == null ? null : currentEr.value(),
                 currentEr == null ? null : sanitize(currentEr.unit(), null),
-                currentEr == null ? null : sanitize(currentEr.status(), null),
+                null,
                 null,
                 LocalDateTime.now()
         );
@@ -294,7 +306,7 @@ public class ExtractService {
                 .toList();
 
         ParameterFieldResponse currentEr = null;
-        if (snapshot.getCurrentErValue() != null || StringUtils.hasText(snapshot.getCurrentErStatus())) {
+        if (snapshot.getCurrentErValue() != null) {
             currentEr = new ParameterFieldResponse(
                     "current_er",
                     "Current ER",
@@ -372,19 +384,6 @@ public class ExtractService {
             throw new IllegalArgumentException("missing parameters: " + String.join(", ", missingKeys));
         }
         return submitted;
-    }
-
-    private String buildValidationPrompt(ChatMessage message, Map<String, SubmittedParam> submittedParams) {
-        String parameterText = SUPPORTED_PARAMETERS.stream()
-                .map(definition -> {
-                    SubmittedParam submitted = submittedParams.get(definition.key());
-                    return definition.key() + "=" + submitted.value() + " " + sanitize(submitted.unit(), definition.defaultUnit());
-                })
-                .collect(Collectors.joining(", "));
-
-        return message.getInputText() + System.lineSeparator()
-                + "사용자가 수정한 공정 조건은 다음과 같습니다: " + parameterText + ". "
-                + "이 값들을 기준으로 pressure, source_power, bias_power를 다시 검증해줘.";
     }
 
     private Double resolveValue(ExtractedParameterData.ValidatedParam aiParam, SubmittedParam submitted) {

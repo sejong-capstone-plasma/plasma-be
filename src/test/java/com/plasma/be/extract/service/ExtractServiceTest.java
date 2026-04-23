@@ -82,7 +82,7 @@ class ExtractServiceTest {
     void validateCorrection_사용자입력값을_기반으로_재검증한다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
         when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
-        when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
+        when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ParameterValidationRequest request = new ParameterValidationRequest(List.of(
@@ -102,7 +102,7 @@ class ExtractServiceTest {
     void validateCorrection_AI가_UNSUPPORTED를_주더라도_수정값이_모두_VALID면_성공으로_본다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
         when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
-        when(extractClient.requestExtraction(anyString())).thenReturn(unsupportedButAllParamsValidResponse());
+        when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(unsupportedButAllParamsValidResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ParameterValidationRequest request = new ParameterValidationRequest(List.of(
@@ -183,7 +183,7 @@ class ExtractServiceTest {
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 new ExtractedParameterData.CurrentOutputs(
-                        new ExtractedParameterData.ValidatedParam(null, "无", "无")
+                        new ExtractedParameterData.ValueWithUnit(null, "无")
                 )
         );
     }

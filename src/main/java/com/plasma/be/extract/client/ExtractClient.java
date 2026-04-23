@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -15,6 +17,7 @@ public class ExtractClient {
 
     private final String baseUrl;
     private final String extractEndpoint;
+    private final String validateEndpoint;
     private final int timeout;
     private final RestClient httpClient;
     private int lastResponseStatus;
@@ -26,12 +29,21 @@ public class ExtractClient {
         this.httpClient = extractRestClient;
         this.baseUrl = baseUrl;
         this.extractEndpoint = "/ai/services/extract-parameters";
+        this.validateEndpoint = "/ai/services/extract-validate";
         this.timeout = timeout;
     }
 
     public ExtractedParameterData requestExtraction(String message) {
         Map<String, String> requestBody = buildRequestBody(message);
         return sendRequest(requestBody);
+    }
+
+    public ExtractedParameterData requestValidation(String processType,
+                                                    String taskType,
+                                                    Map<String, Double> paramValues,
+                                                    Map<String, String> paramUnits) {
+        Map<String, Object> body = buildValidateBody(processType, taskType, paramValues, paramUnits);
+        return sendValidateRequest(body);
     }
 
     Map<String, String> buildRequestBody(String message) {
@@ -41,10 +53,46 @@ public class ExtractClient {
         );
     }
 
+    Map<String, Object> buildValidateBody(String processType,
+                                          String taskType,
+                                          Map<String, Double> paramValues,
+                                          Map<String, String> paramUnits) {
+        Map<String, Object> processParamsMap = new LinkedHashMap<>();
+        for (String key : List.of("pressure", "source_power", "bias_power")) {
+            processParamsMap.put(key, Map.of(
+                    "value", paramValues.getOrDefault(key, 0.0),
+                    "unit",  paramUnits.getOrDefault(key, "")));
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("request_id", UUID.randomUUID().toString());
+        body.put("process_type", processType);
+        body.put("task_type", taskType);
+        body.put("process_params", processParamsMap);
+        body.put("current_outputs", null);
+        return body;
+    }
+
     ExtractedParameterData sendRequest(Map<String, String> body) {
         try {
             ExtractedParameterData response = httpClient.post()
                     .uri(extractEndpoint)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(ExtractedParameterData.class);
+            this.lastResponseStatus = 200;
+            return response;
+        } catch (RestClientException e) {
+            handleClientError(e.getMessage());
+            throw e;
+        }
+    }
+
+    private ExtractedParameterData sendValidateRequest(Map<String, Object> body) {
+        try {
+            ExtractedParameterData response = httpClient.post()
+                    .uri(validateEndpoint)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()

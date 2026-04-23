@@ -6,6 +6,7 @@ import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionsEndRequest;
 import com.plasma.be.extract.dto.ParameterValidationRequest;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
+import com.plasma.be.predict.dto.ConfirmResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -125,14 +126,17 @@ public interface ChatMessageApi {
             HttpSession browserSession
     );
 
-    @Operation(summary = "검증 결과 확정", description = "모든 파라미터가 VALID인 검증 결과를 최종 확정합니다.")
+    @Operation(summary = "검증 결과 확정 및 예측 실행",
+            description = "모든 파라미터가 VALID인 검증 결과를 최종 확정합니다. "
+                    + "task_type이 PREDICTION이면 즉시 예측 파이프라인을 실행하고 결과를 함께 반환합니다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "확정 성공"),
+            @ApiResponse(responseCode = "200", description = "확정 성공 (prediction 필드는 PREDICTION 태스크일 때만 채워짐)"),
             @ApiResponse(responseCode = "400", description = "아직 모든 값이 VALID가 아님"),
-            @ApiResponse(responseCode = "404", description = "메시지 또는 검증 결과를 찾을 수 없음")
+            @ApiResponse(responseCode = "404", description = "메시지 또는 검증 결과를 찾을 수 없음"),
+            @ApiResponse(responseCode = "500", description = "AI 예측 서버 오류")
     })
     @PostMapping("/{messageId}/validations/{validationId}/confirm")
-    ResponseEntity<ParameterValidationResponse> confirmParameters(
+    ResponseEntity<ConfirmResponse> confirmParameters(
             @PathVariable("messageId") Long messageId,
             @PathVariable("validationId") Long validationId,
             HttpSession browserSession
