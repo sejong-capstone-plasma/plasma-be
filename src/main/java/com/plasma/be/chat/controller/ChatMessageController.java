@@ -9,6 +9,7 @@ import com.plasma.be.chat.service.ChatMessageService;
 import com.plasma.be.chat.service.ChatWorkflowService;
 import com.plasma.be.extract.dto.ParameterValidationRequest;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
+import com.plasma.be.predict.dto.ConfirmResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -50,12 +51,12 @@ public class ChatMessageController implements ChatMessageApi {
         return ResponseEntity.ok(response);
     }
 
-    // 최종 검증 결과를 확정 상태로 저장한다.
+    // 최종 검증 결과를 확정하고 PREDICTION이면 예측 결과까지 반환한다.
     @Override
-    public ResponseEntity<ParameterValidationResponse> confirmParameters(Long messageId,
-                                                                        Long validationId,
-                                                                        HttpSession browserSession) {
-        ParameterValidationResponse response = chatWorkflowService.confirmValidation(
+    public ResponseEntity<ConfirmResponse> confirmParameters(Long messageId,
+                                                             Long validationId,
+                                                             HttpSession browserSession) {
+        ConfirmResponse response = chatWorkflowService.confirmValidation(
                 messageId,
                 validationId,
                 browserSession.getId()

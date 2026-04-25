@@ -23,7 +23,12 @@ public record ExtractedParameterData(
             String status
     ) {}
 
+    public record ValueWithUnit(
+            Double value,
+            String unit
+    ) {}
+
     public record CurrentOutputs(
-            @JsonProperty("etch_rate") ValidatedParam etchRate
+            @JsonProperty("etch_rate") ValueWithUnit etchRate
     ) {}
 }
