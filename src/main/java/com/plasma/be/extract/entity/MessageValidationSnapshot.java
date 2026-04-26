@@ -1,8 +1,8 @@
 package com.plasma.be.extract.entity;
 
 import com.plasma.be.chat.entity.ChatMessage;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -76,6 +76,40 @@ public class MessageValidationSnapshot {
     // AI 호출 실패나 예외 상황의 원인을 남긴다.
     @Column(name = "failure_reason", columnDefinition = "TEXT")
     private String failureReason;
+
+    // 예측 파이프라인 결과를 저장한다.
+    @Column(name = "prediction_request_id", length = 36)
+    private String predictionRequestId;
+
+    @Column(name = "prediction_process_type", length = 30)
+    private String predictionProcessType;
+
+    @Column(name = "ion_flux_value")
+    private Double ionFluxValue;
+
+    @Column(name = "ion_flux_unit", length = 30)
+    private String ionFluxUnit;
+
+    @Column(name = "ion_energy_value")
+    private Double ionEnergyValue;
+
+    @Column(name = "ion_energy_unit", length = 30)
+    private String ionEnergyUnit;
+
+    @Column(name = "etch_score_value")
+    private Double etchScoreValue;
+
+    @Column(name = "etch_score_unit", length = 30)
+    private String etchScoreUnit;
+
+    @Column(name = "prediction_explanation_summary", columnDefinition = "TEXT")
+    private String predictionExplanationSummary;
+
+    @Column(name = "prediction_explanation_details_json", columnDefinition = "TEXT")
+    private String predictionExplanationDetailsJson;
+
+    @Column(name = "prediction_error", columnDefinition = "TEXT")
+    private String predictionError;
 
     // 이 검증 결과가 저장된 시각이다.
     @Column(name = "created_at", nullable = false)
@@ -213,6 +247,74 @@ public class MessageValidationSnapshot {
 
     public String getFailureReason() {
         return failureReason;
+    }
+
+    public void storePrediction(String predictionRequestId,
+                                String predictionProcessType,
+                                Double ionFluxValue,
+                                String ionFluxUnit,
+                                Double ionEnergyValue,
+                                String ionEnergyUnit,
+                                Double etchScoreValue,
+                                String etchScoreUnit,
+                                String predictionExplanationSummary,
+                                String predictionExplanationDetailsJson,
+                                String predictionError) {
+        this.predictionRequestId = predictionRequestId;
+        this.predictionProcessType = predictionProcessType;
+        this.ionFluxValue = ionFluxValue;
+        this.ionFluxUnit = ionFluxUnit;
+        this.ionEnergyValue = ionEnergyValue;
+        this.ionEnergyUnit = ionEnergyUnit;
+        this.etchScoreValue = etchScoreValue;
+        this.etchScoreUnit = etchScoreUnit;
+        this.predictionExplanationSummary = predictionExplanationSummary;
+        this.predictionExplanationDetailsJson = predictionExplanationDetailsJson;
+        this.predictionError = predictionError;
+    }
+
+    public String getPredictionRequestId() {
+        return predictionRequestId;
+    }
+
+    public String getPredictionProcessType() {
+        return predictionProcessType;
+    }
+
+    public Double getIonFluxValue() {
+        return ionFluxValue;
+    }
+
+    public String getIonFluxUnit() {
+        return ionFluxUnit;
+    }
+
+    public Double getIonEnergyValue() {
+        return ionEnergyValue;
+    }
+
+    public String getIonEnergyUnit() {
+        return ionEnergyUnit;
+    }
+
+    public Double getEtchScoreValue() {
+        return etchScoreValue;
+    }
+
+    public String getEtchScoreUnit() {
+        return etchScoreUnit;
+    }
+
+    public String getPredictionExplanationSummary() {
+        return predictionExplanationSummary;
+    }
+
+    public String getPredictionExplanationDetailsJson() {
+        return predictionExplanationDetailsJson;
+    }
+
+    public String getPredictionError() {
+        return predictionError;
     }
 
     public LocalDateTime getCreatedAt() {

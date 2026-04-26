@@ -799,6 +799,10 @@
             card.appendChild(reason);
         }
 
+        if (validation.prediction || validation.predictionError) {
+            card.appendChild(createPredictionPanel(validation));
+        }
+
         if (validation.confirmed) {
             const confirmed = document.createElement("div");
             confirmed.className = "failure-reason";
@@ -839,6 +843,44 @@
         }
 
         return card;
+    }
+
+    function createPredictionPanel(validation) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "failure-reason";
+
+        if (validation.predictionError) {
+            wrapper.textContent = `예측 실행 실패: ${validation.predictionError}`;
+            return wrapper;
+        }
+
+        const prediction = validation.prediction || {};
+        const result = prediction.prediction_result || {};
+        const lines = [
+            "예측 결과",
+            formatPredictionLine("Ion Flux", result.ion_flux),
+            formatPredictionLine("Ion Energy", result.ion_energy),
+            formatPredictionLine("Etch Score", result.etch_score)
+        ].filter(Boolean);
+
+        if (prediction.explanation && prediction.explanation.summary) {
+            lines.push(`설명 요약: ${prediction.explanation.summary}`);
+        }
+
+        const details = Array.isArray(prediction.explanation?.details) ? prediction.explanation.details : [];
+        if (details.length > 0) {
+            lines.push(`상세 설명: ${details.join(" / ")}`);
+        }
+
+        wrapper.innerHTML = lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("");
+        return wrapper;
+    }
+
+    function formatPredictionLine(label, entry) {
+        if (!entry || (entry.value === null || entry.value === undefined) && !entry.unit) {
+            return "";
+        }
+        return `${label}: ${formatNumber(entry.value)} ${displayText(entry.unit, "")}`.trim();
     }
 
     function createEditor(messageId, validation) {

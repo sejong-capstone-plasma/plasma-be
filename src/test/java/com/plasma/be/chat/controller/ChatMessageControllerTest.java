@@ -5,6 +5,8 @@ import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
+import com.plasma.be.predict.client.PredictClient;
+import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,12 +44,16 @@ class ChatMessageControllerTest {
     @MockitoBean
     private ExtractClient extractClient;
 
+    @MockitoBean
+    private PredictClient predictClient;
+
     @BeforeEach
     void setUp() {
         snapshotRepository.deleteAll();
         chatMessageRepository.deleteAll();
         chatSessionRepository.deleteAll();
         when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
+        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString())).thenReturn(validPredictionResponse());
     }
 
     @Test
@@ -127,6 +133,86 @@ class ChatMessageControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sourceType").value("USER_CORRECTION"))
                 .andExpect(jsonPath("$.allValid").value(true));
+    }
+
+    @Test
+    void 재검증으로_allValid가_되어도_confirm전에는_confirmed가_false다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString())).thenReturn(invalidAiResponse());
+        when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-001",
+                                  "inputText": "압력은 몰라. 소스 파워 800W, 바이어스 파워 100W로 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].confirmed").value(false))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations", messageId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "parameters": [
+                                    { "key": "pressure", "value": 50.0, "unit": "mTorr" },
+                                    { "key": "source_power", "value": 800.0, "unit": "W" },
+                                    { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allValid").value(true))
+                .andExpect(jsonPath("$.confirmed").value(false));
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-001").session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].validations.length()").value(2))
+                .andExpect(jsonPath("$[0].validations[0].confirmed").value(false))
+                .andExpect(jsonPath("$[0].validations[1].allValid").value(true))
+                .andExpect(jsonPath("$[0].validations[1].confirmed").value(false));
+    }
+
+    @Test
+    void confirm후_예측결과가_저장되어_조회응답에도_포함된다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-001",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 식각률 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.prediction.prediction_result.ion_flux.value").value(1.23))
+                .andExpect(jsonPath("$.validation.prediction.prediction_result.etch_score.value").value(7.89));
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-001").session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].validations[0].prediction.prediction_result.ion_flux.value").value(1.23))
+                .andExpect(jsonPath("$[0].validations[0].prediction.explanation.summary").value("예측 요약"));
     }
 
     @Test
@@ -245,6 +331,19 @@ class ChatMessageControllerTest {
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null
+        );
+    }
+
+    private PredictPipelineResponse validPredictionResponse() {
+        return new PredictPipelineResponse(
+                "predict-001",
+                "ETCH",
+                new PredictPipelineResponse.PredictionResult(
+                        new PredictPipelineResponse.ValueWithUnit(1.23, "a.u."),
+                        new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
+                        new PredictPipelineResponse.ValueWithUnit(7.89, "score")
+                ),
+                new PredictPipelineResponse.Explanation("예측 요약", java.util.List.of("설명1", "설명2"))
         );
     }
 }

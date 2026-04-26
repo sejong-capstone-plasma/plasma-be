@@ -1,5 +1,8 @@
 package com.plasma.be.extract.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.extract.client.ExtractClient;
@@ -11,6 +14,7 @@ import com.plasma.be.extract.dto.ParameterValidationResponse;
 import com.plasma.be.extract.entity.MessageValidationParam;
 import com.plasma.be.extract.entity.MessageValidationSnapshot;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
+import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -40,10 +44,12 @@ public class ExtractService {
     private static final String SOURCE_USER_CORRECTION = "USER_CORRECTION";
     private static final String VALIDATION_AI_ERROR = "AI_ERROR";
     private static final List<String> EMPTY_TEXT_MARKERS = List.of("无", "none", "null", "n/a", "na");
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
     private final ExtractClient extractClient;
     private final ChatMessageRepository chatMessageRepository;
     private final MessageValidationSnapshotRepository snapshotRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ExtractService(ExtractClient extractClient,
                           ChatMessageRepository chatMessageRepository,
@@ -196,6 +202,30 @@ public class ExtractService {
         return snapshotRepository.findByValidationId(validationId).map(this::toResponse);
     }
 
+    @Transactional
+    public ParameterValidationResponse storePredictionOutcome(Long messageId,
+                                                              Long validationId,
+                                                              PredictPipelineResponse prediction,
+                                                              String predictionError) {
+        MessageValidationSnapshot snapshot = snapshotRepository.findByValidationIdAndMessageMessageId(validationId, messageId)
+                .orElseThrow(() -> new IllegalArgumentException("validationId is not associated with the message."));
+
+        snapshot.storePrediction(
+                prediction == null ? null : prediction.requestId(),
+                prediction == null ? null : prediction.processType(),
+                predictionValue(prediction, PredictPipelineResponse.PredictionResult::ionFlux),
+                predictionUnit(prediction, PredictPipelineResponse.PredictionResult::ionFlux),
+                predictionValue(prediction, PredictPipelineResponse.PredictionResult::ionEnergy),
+                predictionUnit(prediction, PredictPipelineResponse.PredictionResult::ionEnergy),
+                predictionValue(prediction, PredictPipelineResponse.PredictionResult::etchScore),
+                predictionUnit(prediction, PredictPipelineResponse.PredictionResult::etchScore),
+                prediction == null || prediction.explanation() == null ? null : sanitize(prediction.explanation().summary(), null),
+                prediction == null || prediction.explanation() == null ? null : writeExplanationDetails(prediction.explanation().details()),
+                sanitize(predictionError, null)
+        );
+        return toResponse(snapshot);
+    }
+
     ExtractedParameterData requestToAiServer(String message) {
         return extractClient.requestExtraction(message);
     }
@@ -329,9 +359,89 @@ public class ExtractService {
                 currentEr,
                 snapshot.isAllValid(),
                 snapshot.isConfirmed(),
+                buildPrediction(snapshot),
+                snapshot.getPredictionError(),
                 snapshot.getFailureReason(),
                 snapshot.getCreatedAt()
         );
+    }
+
+    private PredictPipelineResponse buildPrediction(MessageValidationSnapshot snapshot) {
+        if (!StringUtils.hasText(snapshot.getPredictionRequestId())
+                && !StringUtils.hasText(snapshot.getPredictionProcessType())
+                && snapshot.getIonFluxValue() == null
+                && snapshot.getIonEnergyValue() == null
+                && snapshot.getEtchScoreValue() == null
+                && !StringUtils.hasText(snapshot.getPredictionExplanationSummary())
+                && !StringUtils.hasText(snapshot.getPredictionExplanationDetailsJson())) {
+            return null;
+        }
+
+        PredictPipelineResponse.PredictionResult predictionResult = new PredictPipelineResponse.PredictionResult(
+                valueWithUnit(snapshot.getIonFluxValue(), snapshot.getIonFluxUnit()),
+                valueWithUnit(snapshot.getIonEnergyValue(), snapshot.getIonEnergyUnit()),
+                valueWithUnit(snapshot.getEtchScoreValue(), snapshot.getEtchScoreUnit())
+        );
+
+        PredictPipelineResponse.Explanation explanation = null;
+        if (StringUtils.hasText(snapshot.getPredictionExplanationSummary())
+                || StringUtils.hasText(snapshot.getPredictionExplanationDetailsJson())) {
+            explanation = new PredictPipelineResponse.Explanation(
+                    snapshot.getPredictionExplanationSummary(),
+                    readExplanationDetails(snapshot.getPredictionExplanationDetailsJson())
+            );
+        }
+
+        return new PredictPipelineResponse(
+                snapshot.getPredictionRequestId(),
+                snapshot.getPredictionProcessType(),
+                predictionResult,
+                explanation
+        );
+    }
+
+    private PredictPipelineResponse.ValueWithUnit valueWithUnit(Double value, String unit) {
+        if (value == null && !StringUtils.hasText(unit)) {
+            return null;
+        }
+        return new PredictPipelineResponse.ValueWithUnit(value, unit);
+    }
+
+    private Double predictionValue(PredictPipelineResponse prediction,
+                                   java.util.function.Function<PredictPipelineResponse.PredictionResult, PredictPipelineResponse.ValueWithUnit> selector) {
+        if (prediction == null || prediction.predictionResult() == null) {
+            return null;
+        }
+        PredictPipelineResponse.ValueWithUnit valueWithUnit = selector.apply(prediction.predictionResult());
+        return valueWithUnit == null ? null : valueWithUnit.value();
+    }
+
+    private String predictionUnit(PredictPipelineResponse prediction,
+                                  java.util.function.Function<PredictPipelineResponse.PredictionResult, PredictPipelineResponse.ValueWithUnit> selector) {
+        if (prediction == null || prediction.predictionResult() == null) {
+            return null;
+        }
+        PredictPipelineResponse.ValueWithUnit valueWithUnit = selector.apply(prediction.predictionResult());
+        return valueWithUnit == null ? null : sanitize(valueWithUnit.unit(), null);
+    }
+
+    private String writeExplanationDetails(List<String> details) {
+        try {
+            return objectMapper.writeValueAsString(details == null ? List.of() : details);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize prediction explanation details.", exception);
+        }
+    }
+
+    private List<String> readExplanationDetails(String detailsJson) {
+        if (!StringUtils.hasText(detailsJson)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(detailsJson, STRING_LIST_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to deserialize prediction explanation details.", exception);
+        }
     }
 
     private ChatMessage getManagedMessage(Long messageId) {

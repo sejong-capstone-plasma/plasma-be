@@ -11,6 +11,7 @@ import com.plasma.be.extract.dto.ParameterValidationRequest;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
 import com.plasma.be.extract.entity.MessageValidationSnapshot;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
+import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -145,6 +146,19 @@ class ExtractServiceTest {
         verify(snapshotRepository).save(any(MessageValidationSnapshot.class));
     }
 
+    @Test
+    void storePredictionOutcome_예측결과를_저장하고_응답에_포함한다() {
+        MessageValidationSnapshot snapshot = validSnapshot();
+        when(snapshotRepository.findByValidationIdAndMessageMessageId(11L, 1L)).thenReturn(Optional.of(snapshot));
+
+        ParameterValidationResponse response = extractService.storePredictionOutcome(1L, 11L, predictionResponse(), null);
+
+        assertThat(response.prediction()).isNotNull();
+        assertThat(response.prediction().predictionResult().ionFlux().value()).isEqualTo(1.23);
+        assertThat(response.prediction().explanation().details()).containsExactly("line-1", "line-2");
+        assertThat(response.predictionError()).isNull();
+    }
+
     private ChatMessage dummyChatMessage() {
         Session session = Session.create("session-001", "browser-001", "테스트 세션", LocalDateTime.now());
         return new ChatMessage(session, MessageRole.USER, "압력 50mTorr 식각률 예측해줘", LocalDateTime.now());
@@ -197,6 +211,40 @@ class ExtractServiceTest {
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null
+        );
+    }
+
+    private MessageValidationSnapshot validSnapshot() {
+        MessageValidationSnapshot snapshot = MessageValidationSnapshot.create(
+                dummyChatMessage(),
+                "req-validation",
+                1,
+                "USER_CORRECTION",
+                "VALID",
+                "ETCH",
+                "PREDICTION",
+                null,
+                null,
+                null,
+                null,
+                LocalDateTime.now()
+        );
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 50.0, "mTorr", "VALID", 0));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "VALID", 1));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "VALID", 2));
+        return snapshot;
+    }
+
+    private PredictPipelineResponse predictionResponse() {
+        return new PredictPipelineResponse(
+                "predict-001",
+                "ETCH",
+                new PredictPipelineResponse.PredictionResult(
+                        new PredictPipelineResponse.ValueWithUnit(1.23, "a.u."),
+                        new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
+                        new PredictPipelineResponse.ValueWithUnit(7.89, "score")
+                ),
+                new PredictPipelineResponse.Explanation("summary", List.of("line-1", "line-2"))
         );
     }
 }

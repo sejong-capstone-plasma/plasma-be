@@ -81,9 +81,13 @@ public class ChatWorkflowService {
 
         try {
             PredictPipelineResponse prediction = runPredictPipeline(message, validation);
-            return new ConfirmResponse(validation, prediction, null);
+            ParameterValidationResponse updatedValidation =
+                    extractService.storePredictionOutcome(messageId, validationId, prediction, null);
+            return new ConfirmResponse(updatedValidation, prediction, null);
         } catch (RestClientException e) {
-            return new ConfirmResponse(validation, null, e.getMessage());
+            ParameterValidationResponse updatedValidation =
+                    extractService.storePredictionOutcome(messageId, validationId, null, e.getMessage());
+            return new ConfirmResponse(updatedValidation, null, e.getMessage());
         }
     }
 
