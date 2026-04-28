@@ -378,6 +378,15 @@
             line-height: 1.55;
         }
 
+        .result-pre {
+            margin: 10px 0 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: "SFMono-Regular", "Consolas", monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
         .editor {
             margin-top: 18px;
             padding-top: 18px;
@@ -583,6 +592,7 @@
     const newChatButtonEl = document.getElementById("newChatButton");
     const draftSessionIdEl = document.getElementById("draftSessionId");
     const viewSessionIdEl = document.getElementById("viewSessionId");
+    const pipelineRuns = new Map();
 
     syncSessionLabels();
     sendButtonEl.addEventListener("click", submitMessage);
@@ -755,11 +765,13 @@
 
     function createValidationCard(message, validation, isLatest) {
         const card = document.createElement("div");
-        card.className = "validation-card " + validationClass(validation);
         const invalidParameters = (validation.parameters || []).filter((parameter) => !isParameterValid(parameter));
         const hasInvalidParameters = invalidParameters.length > 0;
+        const parametersReady = hasReadyParameters(validation);
+        const pipelineRun = pipelineRuns.get(validation.validationId) || null;
+        card.className = "validation-card " + validationClass(validation, parametersReady);
 
-        const statusClass = validationClass(validation);
+        const statusClass = validationClass(validation, parametersReady);
         const head = document.createElement("div");
         head.className = "card-head";
         head.innerHTML = `
@@ -767,7 +779,7 @@
                 <div class="card-title">${validationTitle(validation)}</div>
                 <div class="card-subtitle">시도 ${validation.attemptNo} · ${formatDate(validation.createdAt)} · ${validation.sourceType}</div>
             </div>
-            <div class="status-chip ${statusClass}">${humanValidationStatus(validation)}</div>
+            <div class="status-chip ${statusClass}">${humanValidationStatus(validation, parametersReady)}</div>
         `;
         card.appendChild(head);
 
@@ -799,8 +811,12 @@
             card.appendChild(reason);
         }
 
-        if (validation.prediction || validation.predictionError) {
-            card.appendChild(createPredictionPanel(validation));
+        if (validation.prediction || validation.predictionError || pipelineRun?.predict || pipelineRun?.predictError) {
+            card.appendChild(createPredictionPanel(validation, pipelineRun));
+        }
+
+        if (pipelineRun?.optimize || pipelineRun?.optimizeError) {
+            card.appendChild(createOptimizePanel(pipelineRun));
         }
 
         if (validation.confirmed) {
@@ -811,18 +827,47 @@
             return card;
         }
 
-        if (isLatest && validation.allValid) {
+        if (isLatest && parametersReady) {
             const editor = document.createElement("div");
             editor.className = "editor";
-            editor.innerHTML = `
-                <div class="editor-title">모든 값이 VALID입니다. 확인 버튼을 누르면 이 결과를 다음 단계로 넘길 수 있습니다.</div>
-                <div class="editor-actions">
-                    <button type="button">이 값으로 확정</button>
-                </div>
-            `;
-            editor.querySelector("button").addEventListener("click", async () => {
-                await confirmValidation(message.messageId, validation.validationId);
-            });
+            const taskType = normalizeStatus(validation.taskType);
+            const isPredictionTask = isPredictTask(taskType);
+            const isOptimizeTask = isOptimizeTaskType(taskType);
+            const shouldShowPredict = !taskType || isPredictionTask;
+            const shouldShowOptimize = !taskType || isOptimizeTask;
+
+            const title = document.createElement("div");
+            title.className = "editor-title";
+            title.textContent = !taskType
+                ? "모든 값이 VALID입니다. 아래에서 분석 또는 최적화를 선택하세요."
+                : `모든 값이 VALID입니다. ${isPredictionTask ? "분석" : "최적화"}를 실행할 수 있습니다.`;
+            editor.appendChild(title);
+
+            const actions = document.createElement("div");
+            actions.className = "editor-actions";
+
+            if (shouldShowPredict) {
+                const predictButton = document.createElement("button");
+                predictButton.type = "button";
+                predictButton.textContent = "분석 실행";
+                predictButton.addEventListener("click", async () => {
+                    await runPredictPipeline(message, validation, predictButton);
+                });
+                actions.appendChild(predictButton);
+            }
+
+            if (shouldShowOptimize) {
+                const optimizeButton = document.createElement("button");
+                optimizeButton.type = "button";
+                optimizeButton.className = "secondary";
+                optimizeButton.textContent = "최적화 실행";
+                optimizeButton.addEventListener("click", async () => {
+                    await runOptimizePipeline(message, validation, optimizeButton);
+                });
+                actions.appendChild(optimizeButton);
+            }
+
+            editor.appendChild(actions);
             card.appendChild(editor);
             return card;
         }
@@ -845,16 +890,17 @@
         return card;
     }
 
-    function createPredictionPanel(validation) {
+    function createPredictionPanel(validation, pipelineRun) {
         const wrapper = document.createElement("div");
         wrapper.className = "failure-reason";
 
-        if (validation.predictionError) {
-            wrapper.textContent = `예측 실행 실패: ${validation.predictionError}`;
+        const predictionError = pipelineRun?.predictError || validation.predictionError;
+        if (predictionError) {
+            wrapper.textContent = `예측 실행 실패: ${predictionError}`;
             return wrapper;
         }
 
-        const prediction = validation.prediction || {};
+        const prediction = pipelineRun?.predict || validation.prediction || {};
         const result = prediction.prediction_result || {};
         const lines = [
             "예측 결과",
@@ -873,6 +919,22 @@
         }
 
         wrapper.innerHTML = lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("");
+        return wrapper;
+    }
+
+    function createOptimizePanel(pipelineRun) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "failure-reason";
+
+        if (pipelineRun.optimizeError) {
+            wrapper.textContent = `최적화 실행 실패: ${pipelineRun.optimizeError}`;
+            return wrapper;
+        }
+
+        wrapper.innerHTML = `
+            <div>최적화 결과</div>
+            <pre class="result-pre">${escapeHtml(JSON.stringify(pipelineRun.optimize || {}, null, 2))}</pre>
+        `;
         return wrapper;
     }
 
@@ -963,26 +1025,85 @@
         return editor;
     }
 
-    async function confirmValidation(messageId, validationId) {
+    async function runPredictPipeline(message, validation, buttonEl) {
         if (busy) {
             return;
         }
 
         busy = true;
+        buttonEl.disabled = true;
         try {
-            const response = await fetch(`/api/chat/messages/${messageId}/validations/${validationId}/confirm`, {
-                method: "POST"
+            const requestBody = buildPredictRequest(message, validation);
+            const response = await fetch("/api/predict/raw", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(requestBody)
             });
             const payload = await readJson(response);
             if (!response.ok) {
-                throw new Error(payload.message || "확정 처리에 실패했습니다.");
+                throw new Error(buildHttpErrorMessage("분석 실행", response, payload, requestBody));
             }
-            await refreshHistory();
+            const existing = pipelineRuns.get(validation.validationId) || {};
+            pipelineRuns.set(validation.validationId, {
+                ...existing,
+                predict: payload,
+                predictError: null
+            });
             await loadSessionMessages(viewedSessionId, { allowEmpty: false });
         } catch (error) {
-            appendSystemMessage(error.message || "확정 처리 중 오류가 발생했습니다.");
+            const existing = pipelineRuns.get(validation.validationId) || {};
+            pipelineRuns.set(validation.validationId, {
+                ...existing,
+                predict: null,
+                predictError: error.message || "분석 실행 중 오류가 발생했습니다."
+            });
+            await loadSessionMessages(viewedSessionId, { allowEmpty: false });
         } finally {
             busy = false;
+            buttonEl.disabled = false;
+        }
+    }
+
+    async function runOptimizePipeline(message, validation, buttonEl) {
+        if (busy) {
+            return;
+        }
+
+        busy = true;
+        buttonEl.disabled = true;
+        try {
+            const requestBody = buildOptimizeRequest(message, validation);
+            const response = await fetch("/api/optimize/raw", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(requestBody)
+            });
+            const payload = await readJson(response);
+            if (!response.ok) {
+                throw new Error(buildHttpErrorMessage("최적화 실행", response, payload, requestBody));
+            }
+            const existing = pipelineRuns.get(validation.validationId) || {};
+            pipelineRuns.set(validation.validationId, {
+                ...existing,
+                optimize: payload,
+                optimizeError: null
+            });
+            await loadSessionMessages(viewedSessionId, { allowEmpty: false });
+        } catch (error) {
+            const existing = pipelineRuns.get(validation.validationId) || {};
+            pipelineRuns.set(validation.validationId, {
+                ...existing,
+                optimize: null,
+                optimizeError: error.message || "최적화 실행 중 오류가 발생했습니다."
+            });
+            await loadSessionMessages(viewedSessionId, { allowEmpty: false });
+        } finally {
+            busy = false;
+            buttonEl.disabled = false;
         }
     }
 
@@ -1020,8 +1141,8 @@
         return "초기 AI 추출 결과";
     }
 
-    function validationClass(validation) {
-        if (validation.confirmed || validation.allValid) {
+    function validationClass(validation, parametersReady = hasReadyParameters(validation)) {
+        if (validation.confirmed || validation.allValid || parametersReady) {
             return "valid";
         }
         if (validation.validationStatus === "AI_ERROR") {
@@ -1030,11 +1151,11 @@
         return "invalid";
     }
 
-    function humanValidationStatus(validation) {
+    function humanValidationStatus(validation, parametersReady = hasReadyParameters(validation)) {
         if (validation.confirmed) {
             return "CONFIRMED";
         }
-        if (validation.allValid) {
+        if (validation.allValid || parametersReady) {
             return "ALL VALID";
         }
         return validation.validationStatus || "UNKNOWN";
@@ -1096,6 +1217,84 @@
 
     function isParameterValid(parameter) {
         return normalizeStatus(parameter?.status) === "VALID";
+    }
+
+    function hasReadyParameters(validation) {
+        const parameters = Array.isArray(validation?.parameters) ? validation.parameters : [];
+        return parameters.length > 0 && parameters.every(isParameterValid);
+    }
+
+    function isPredictTask(taskType) {
+        return taskType === "PREDICTION" || taskType === "PREDICT";
+    }
+
+    function isOptimizeTaskType(taskType) {
+        return taskType === "OPTIMIZE" || taskType === "OPTIMIZATION" || taskType === "OPTIMISATION";
+    }
+
+    function buildPredictRequest(message, validation) {
+        const parameterMap = toParameterMap(validation.parameters);
+        return {
+            originalUserInput: message.inputText || "",
+            processType: validation.processType || "ETCH",
+            pressure: toValueUnit(parameterMap.pressure),
+            sourcePower: toValueUnit(parameterMap.source_power),
+            biasPower: toValueUnit(parameterMap.bias_power)
+        };
+    }
+
+    function buildOptimizeRequest(message, validation) {
+        const parameterMap = toParameterMap(validation.parameters);
+        const request = {
+            originalUserInput: message.inputText || "",
+            processType: validation.processType || "ETCH",
+            processParams: {
+                pressure: toValueUnit(parameterMap.pressure),
+                source_power: toValueUnit(parameterMap.source_power),
+                bias_power: toValueUnit(parameterMap.bias_power)
+            }
+        };
+
+        const currentValue = validation.currentEr?.value ?? null;
+        const currentUnit = validation.currentEr?.unit || "nm/min";
+        if (currentValue !== null && currentValue !== undefined && !Number.isNaN(currentValue)) {
+            request.currentOutputs = {
+                etch_rate: {
+                    value: currentValue,
+                    unit: currentUnit
+                }
+            };
+        }
+
+        return request;
+    }
+
+    function toParameterMap(parameters) {
+        return Object.fromEntries((parameters || []).map((parameter) => [parameter.key, parameter]));
+    }
+
+    function toValueUnit(entry) {
+        return {
+            value: entry?.value ?? null,
+            unit: entry?.unit ?? ""
+        };
+    }
+
+    function buildHttpErrorMessage(action, response, payload, requestBody) {
+        const message = payload?.message
+            || payload?.error
+            || (typeof payload === "string" ? payload : "");
+
+        const lines = [`${action} 실패 (${response.status} ${response.statusText})`];
+
+        if (message) {
+            lines.push(`응답: ${message}`);
+        } else if (payload && typeof payload === "object" && Object.keys(payload).length > 0) {
+            lines.push(`응답 JSON: ${JSON.stringify(payload, null, 2)}`);
+        }
+
+        lines.push(`요청 JSON: ${JSON.stringify(requestBody, null, 2)}`);
+        return lines.join("\n");
     }
 
     function getOrCreateSessionId() {

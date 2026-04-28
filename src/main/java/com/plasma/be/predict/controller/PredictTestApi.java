@@ -14,13 +14,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
-@Tag(name = "Predict Test", description = "AI 예측 파이프라인 단독 테스트 API")
-@RequestMapping("/api/test/predict")
+@Tag(name = "Predict", description = "AI 예측 파이프라인 프록시 API")
+@RequestMapping("/api/predict")
 public interface PredictTestApi {
 
     @Operation(
-            summary = "예측 파이프라인 직접 호출",
-            description = "파라미터를 직접 입력해 /ai/pipelines/predict 응답(예측 결과 + LLM 설명)을 확인합니다."
+            summary = "예측 파이프라인 호출",
+            description = "프론트 요청을 /ai/pipelines/predict 로 전달하고 예측 결과를 반환합니다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "예측 성공",
