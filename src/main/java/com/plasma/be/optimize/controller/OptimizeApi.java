@@ -46,9 +46,6 @@ public interface OptimizeApi {
                                       },
                                       "currentOutputs": {
                                         "etch_rate": { "value": 120.0, "unit": "nm/min" }
-                                      },
-                                      "targetOutputs": {
-                                        "etch_rate": { "value": 150.0, "unit": "nm/min" }
                                       }
                                     }
                                     """))

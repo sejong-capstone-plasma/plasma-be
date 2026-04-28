@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.Map;
 
@@ -36,21 +37,26 @@ public class OptimizeController implements OptimizeApi {
         if (request.processType() == null || request.processType().isBlank()) {
             throw new IllegalArgumentException("processType is required.");
         }
-        if (request.processParams() == null || request.processParams().isNull() || !request.processParams().isObject()
-                || request.processParams().size() == 0) {
+        if (request.processParams() == null || request.processParams().isEmpty()) {
             throw new IllegalArgumentException("processParams must be a non-empty object.");
         }
-        if (request.currentOutputs() != null && !request.currentOutputs().isNull() && !request.currentOutputs().isObject()) {
+        if (request.currentOutputs() != null && request.currentOutputs().isEmpty()) {
             throw new IllegalArgumentException("currentOutputs must be an object.");
-        }
-        if (request.targetOutputs() != null && !request.targetOutputs().isNull() && !request.targetOutputs().isObject()) {
-            throw new IllegalArgumentException("targetOutputs must be an object.");
         }
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgumentException(IllegalArgumentException exception) {
         return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(RestClientResponseException.class)
+    public ResponseEntity<Map<String, String>> handleRestClientResponseException(RestClientResponseException exception) {
+        String responseBody = exception.getResponseBodyAsString();
+        String message = (responseBody == null || responseBody.isBlank())
+                ? exception.getMessage()
+                : responseBody;
+        return ResponseEntity.status(exception.getStatusCode()).body(Map.of("message", message));
     }
 
     @ExceptionHandler(RestClientException.class)

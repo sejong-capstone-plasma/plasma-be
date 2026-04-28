@@ -1,12 +1,11 @@
 package com.plasma.be.optimize.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import java.util.Map;
 
 public record OptimizeRequest(
         String originalUserInput,
         String processType,
-        JsonNode processParams,
-        JsonNode currentOutputs,
-        JsonNode targetOutputs
+        Map<String, Object> processParams,
+        Map<String, Object> currentOutputs
 ) {
 }

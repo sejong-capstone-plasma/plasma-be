@@ -12,6 +12,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -31,9 +33,10 @@ class OptimizeControllerTest {
     @Test
     void optimizeRaw_AI응답을_그대로_반환한다() {
         OptimizeRequest request = validRequest();
-        OptimizePipelineResponse aiResponse = new OptimizePipelineResponse();
-        aiResponse.put("status", "ok");
-        aiResponse.put("summary", "optimized");
+        ObjectNode aiPayload = objectMapper.createObjectNode()
+                .put("status", "ok")
+                .put("summary", "optimized");
+        OptimizePipelineResponse aiResponse = new OptimizePipelineResponse(aiPayload);
         when(optimizeClient.requestOptimizePipeline(any())).thenReturn(aiResponse);
 
         ResponseEntity<OptimizePipelineResponse> response = optimizeController.optimizeRaw(request);
@@ -47,8 +50,7 @@ class OptimizeControllerTest {
         OptimizeRequest request = new OptimizeRequest(
                 "최적화해줘",
                 "ETCH",
-                objectMapper.createObjectNode(),
-                null,
+                Map.of(),
                 null
         );
 
@@ -58,22 +60,11 @@ class OptimizeControllerTest {
     }
 
     private OptimizeRequest validRequest() {
-        ObjectNode processParams = objectMapper.createObjectNode();
-        processParams.putObject("pressure")
-                .put("value", 50.0)
-                .put("unit", "mTorr");
-
-        ObjectNode targetOutputs = objectMapper.createObjectNode();
-        targetOutputs.putObject("etch_rate")
-                .put("value", 150.0)
-                .put("unit", "nm/min");
-
         return new OptimizeRequest(
                 "최적화해줘",
                 "ETCH",
-                processParams,
-                null,
-                targetOutputs
+                Map.of("pressure", Map.of("value", 50.0, "unit", "mTorr")),
+                null
         );
     }
 }

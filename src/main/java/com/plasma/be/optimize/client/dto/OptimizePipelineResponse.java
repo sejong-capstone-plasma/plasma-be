@@ -1,22 +1,16 @@
 package com.plasma.be.optimize.client.dto;
 
-import com.fasterxml.jackson.annotation.JsonAnyGetter;
-import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
+public record OptimizePipelineResponse(Object payload) {
 
-public class OptimizePipelineResponse {
-
-    private final Map<String, Object> payload = new LinkedHashMap<>();
-
-    @JsonAnySetter
-    public void put(String key, Object value) {
-        payload.put(key, value);
+    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+    public OptimizePipelineResponse {
     }
 
-    @JsonAnyGetter
-    public Map<String, Object> payload() {
+    @JsonValue
+    public Object payload() {
         return payload;
     }
 }
