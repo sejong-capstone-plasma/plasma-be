@@ -52,7 +52,7 @@ class ChatMessageControllerTest {
         snapshotRepository.deleteAll();
         chatMessageRepository.deleteAll();
         chatSessionRepository.deleteAll();
-        when(extractClient.requestExtraction(anyString())).thenReturn(validAiResponse());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
         when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString())).thenReturn(validPredictionResponse());
     }
 
@@ -79,7 +79,7 @@ class ChatMessageControllerTest {
 
     @Test
     void createMessage_INVALID_FIELD도_200으로_내려준다() throws Exception {
-        when(extractClient.requestExtraction(anyString())).thenReturn(invalidAiResponse());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(invalidAiResponse());
 
         mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession("browser-a"))
@@ -99,7 +99,7 @@ class ChatMessageControllerTest {
     @Test
     void validateParameters_재검증_가능() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
-        when(extractClient.requestExtraction(anyString())).thenReturn(invalidAiResponse());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(invalidAiResponse());
         when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -138,7 +138,7 @@ class ChatMessageControllerTest {
     @Test
     void 재검증으로_allValid가_되어도_confirm전에는_confirmed가_false다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
-        when(extractClient.requestExtraction(anyString())).thenReturn(invalidAiResponse());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(invalidAiResponse());
         when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
 
         String body = mockMvc.perform(post("/api/chat/messages")

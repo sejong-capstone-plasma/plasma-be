@@ -75,7 +75,12 @@ public class ChatWorkflowService {
         ParameterValidationResponse validation = extractService.confirmValidation(messageId, validationId)
                 .orElseThrow(() -> new NoSuchElementException("validationId is not associated with the message."));
 
-        if (!"PREDICTION".equals(validation.taskType())) {
+        String taskType = validation.taskType();
+        if ("COMPARISON".equals(taskType) || "QUESTION".equals(taskType)
+                || "UNSUPPORTED".equals(taskType)) {
+            return new ConfirmResponse(validation, null, null);
+        }
+        if (!"PREDICTION".equals(taskType)) {
             return new ConfirmResponse(validation, null, null);
         }
 
