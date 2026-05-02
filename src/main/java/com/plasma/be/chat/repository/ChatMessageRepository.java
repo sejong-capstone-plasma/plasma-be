@@ -17,4 +17,6 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     @EntityGraph(attributePaths = "session")
     Optional<ChatMessage> findByMessageIdAndSessionOwnerSessionKey(Long messageId, String ownerSessionKey);
+
+    List<ChatMessage> findBySessionSessionIdAndMessageIdLessThanOrderByCreatedAtAsc(String sessionId, Long messageId);
 }

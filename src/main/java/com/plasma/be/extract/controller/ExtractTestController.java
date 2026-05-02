@@ -35,7 +35,7 @@ public class ExtractTestController implements ExtractTestApi {
     @Override
     public ResponseEntity<?> ping() {
         try {
-            extractClient.requestExtraction("테스트: 압력 50mTorr, 소스파워 500W, 바이어스파워 50W");
+            extractClient.requestExtraction("테스트: 압력 50mTorr, 소스파워 500W, 바이어스파워 50W", List.of());
             return ResponseEntity.ok(Map.of("status", "ok", "message", "AI server is reachable"));
         } catch (RestClientException e) {
             return ResponseEntity.internalServerError()
@@ -46,7 +46,7 @@ public class ExtractTestController implements ExtractTestApi {
     @Override
     public ResponseEntity<ExtractedParameterData> extractRaw(ExtractTestRequest request) {
         validateInput(request);
-        ExtractedParameterData data = extractClient.requestExtraction(request.userInput().trim());
+        ExtractedParameterData data = extractClient.requestExtraction(request.userInput().trim(), List.of());
         return ResponseEntity.ok(data);
     }
 

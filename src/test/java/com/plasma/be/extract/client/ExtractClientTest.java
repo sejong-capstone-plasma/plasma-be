@@ -3,6 +3,7 @@ package com.plasma.be.extract.client;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,10 +19,24 @@ class ExtractClientTest {
 
     @Test
     void buildRequestBody_스네이크케이스_필드를_생성한다() {
-        Map<String, String> requestBody = extractClient.buildRequestBody("압력 50mTorr 식각률 예측");
+        Map<String, Object> requestBody = extractClient.buildRequestBody("압력 50mTorr 식각률 예측", List.of());
 
         assertThat(requestBody).containsEntry("user_input", "압력 50mTorr 식각률 예측");
-        assertThat(requestBody.get("request_id")).isNotBlank();
+        assertThat(requestBody).containsEntry("history", List.of());
+        assertThat(requestBody.get("request_id")).isNotNull();
+    }
+
+    @Test
+    void buildRequestBody_히스토리_항목이_포함된다() {
+        List<Map<String, String>> history = List.of(
+                Map.of("role", "user", "content", "압력 50mTorr 예측해줘"),
+                Map.of("role", "assistant", "content", "etch score 75.0 point 수준입니다.")
+        );
+
+        Map<String, Object> requestBody = extractClient.buildRequestBody("source power 100W 올려서 다시 예측해줘", history);
+
+        assertThat(requestBody).containsEntry("history", history);
+        assertThat(requestBody.get("request_id")).isNotNull();
     }
 
     @Test

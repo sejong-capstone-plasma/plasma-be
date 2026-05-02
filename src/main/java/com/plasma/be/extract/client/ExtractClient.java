@@ -34,8 +34,8 @@ public class ExtractClient {
         this.timeout = timeout;
     }
 
-    public ExtractedParameterData requestExtraction(String message) {
-        Map<String, String> requestBody = buildRequestBody(message);
+    public ExtractedParameterData requestExtraction(String message, List<Map<String, String>> history) {
+        Map<String, Object> requestBody = buildRequestBody(message, history);
         return sendRequest(requestBody);
     }
 
@@ -47,11 +47,12 @@ public class ExtractClient {
         return sendValidateRequest(body);
     }
 
-    Map<String, String> buildRequestBody(String message) {
-        return Map.of(
-                "request_id", UUID.randomUUID().toString(),
-                "user_input", message
-        );
+    Map<String, Object> buildRequestBody(String message, List<Map<String, String>> history) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("request_id", UUID.randomUUID().toString());
+        body.put("user_input", message);
+        body.put("history", history != null ? history : List.of());
+        return body;
     }
 
     Map<String, Object> buildValidateBody(String processType,
@@ -74,7 +75,7 @@ public class ExtractClient {
         return body;
     }
 
-    ExtractedParameterData sendRequest(Map<String, String> body) {
+    ExtractedParameterData sendRequest(Map<String, Object> body) {
         try {
             ExtractedParameterData response = httpClient.post()
                     .uri(extractEndpoint)

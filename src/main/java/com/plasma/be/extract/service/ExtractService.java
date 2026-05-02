@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plasma.be.chat.entity.ChatMessage;
+import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
@@ -66,7 +67,8 @@ public class ExtractService {
         int attemptNo = nextAttemptNo(messageId);
 
         try {
-            ExtractedParameterData data = requestToAiServer(message.getInputText());
+            List<Map<String, String>> history = buildHistory(message);
+            ExtractedParameterData data = requestToAiServer(message.getInputText(), history);
             if (data == null) {
                 MessageValidationSnapshot failure = createFailureSnapshot(
                         message,
@@ -226,8 +228,31 @@ public class ExtractService {
         return toResponse(snapshot);
     }
 
-    ExtractedParameterData requestToAiServer(String message) {
-        return extractClient.requestExtraction(message);
+    ExtractedParameterData requestToAiServer(String message, List<Map<String, String>> history) {
+        return extractClient.requestExtraction(message, history);
+    }
+
+    private List<Map<String, String>> buildHistory(ChatMessage currentMessage) {
+        String sessionId = currentMessage.getSession().getSessionId();
+        Long currentMessageId = currentMessage.getMessageId();
+
+        List<ChatMessage> priorMessages = chatMessageRepository
+                .findBySessionSessionIdAndMessageIdLessThanOrderByCreatedAtAsc(sessionId, currentMessageId);
+
+        List<Map<String, String>> history = new ArrayList<>();
+        for (ChatMessage prior : priorMessages) {
+            if (prior.getRole() != MessageRole.USER) {
+                continue;
+            }
+            history.add(Map.of("role", "user", "content", prior.getInputText()));
+
+            snapshotRepository.findByMessageMessageIdAndConfirmedTrue(prior.getMessageId()).stream()
+                    .findFirst()
+                    .map(MessageValidationSnapshot::getPredictionExplanationSummary)
+                    .filter(StringUtils::hasText)
+                    .ifPresent(summary -> history.add(Map.of("role", "assistant", "content", summary)));
+        }
+        return history;
     }
 
     MessageValidationSnapshot createSnapshot(ChatMessage message,
