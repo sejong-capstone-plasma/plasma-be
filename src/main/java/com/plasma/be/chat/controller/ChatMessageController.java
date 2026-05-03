@@ -1,6 +1,7 @@
 package com.plasma.be.chat.controller;
 
 import com.plasma.be.chat.dto.ChatMessageCreateRequest;
+import com.plasma.be.chat.dto.ConfirmRequest;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionsEndRequest;
@@ -55,11 +56,13 @@ public class ChatMessageController implements ChatMessageApi {
     @Override
     public ResponseEntity<ConfirmResponse> confirmParameters(Long messageId,
                                                              Long validationId,
+                                                             ConfirmRequest request,
                                                              HttpSession browserSession) {
         ConfirmResponse response = chatWorkflowService.confirmValidation(
                 messageId,
                 validationId,
-                browserSession.getId()
+                browserSession.getId(),
+                request == null ? null : request.requestedTaskType()
         );
         return ResponseEntity.ok(response);
     }

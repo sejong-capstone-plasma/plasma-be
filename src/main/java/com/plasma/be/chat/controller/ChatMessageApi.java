@@ -1,6 +1,7 @@
 package com.plasma.be.chat.controller;
 
 import com.plasma.be.chat.dto.ChatMessageCreateRequest;
+import com.plasma.be.chat.dto.ConfirmRequest;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionsEndRequest;
@@ -126,9 +127,9 @@ public interface ChatMessageApi {
             HttpSession browserSession
     );
 
-    @Operation(summary = "검증 결과 확정 및 예측 실행",
+    @Operation(summary = "검증 결과 확정 및 후속 실행",
             description = "모든 파라미터가 VALID인 검증 결과를 최종 확정합니다. "
-                    + "task_type이 PREDICTION이면 즉시 예측 파이프라인을 실행하고 결과를 함께 반환합니다.")
+                    + "task_type이 있으면 해당 태스크를 실행하고, 없으면 requestedTaskType으로 예측/최적화를 선택할 수 있습니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "확정 성공 (prediction 필드는 PREDICTION 태스크일 때만 채워짐)"),
             @ApiResponse(responseCode = "400", description = "아직 모든 값이 VALID가 아님"),
@@ -139,6 +140,17 @@ public interface ChatMessageApi {
     ResponseEntity<ConfirmResponse> confirmParameters(
             @PathVariable("messageId") Long messageId,
             @PathVariable("validationId") Long validationId,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = false,
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ConfirmRequest.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "requestedTaskType": "PREDICTION"
+                                    }
+                                    """))
+            )
+            @RequestBody(required = false) ConfirmRequest request,
             HttpSession browserSession
     );
 

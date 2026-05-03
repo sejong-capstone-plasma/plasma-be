@@ -25,4 +25,10 @@ public interface MessageValidationSnapshotRepository extends JpaRepository<Messa
     Optional<MessageValidationSnapshot> findTopByMessageMessageIdOrderByAttemptNoDesc(Long messageId);
 
     List<MessageValidationSnapshot> findByMessageMessageIdAndConfirmedTrue(Long messageId);
+
+    @EntityGraph(attributePaths = {"message", "items"})
+    Optional<MessageValidationSnapshot> findTopByMessageSessionSessionIdAndConfirmedTrueAndMessageMessageIdNotOrderByCreatedAtDesc(
+            String sessionId,
+            Long messageId
+    );
 }

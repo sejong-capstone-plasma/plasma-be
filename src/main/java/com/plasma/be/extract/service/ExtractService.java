@@ -187,7 +187,7 @@ public class ExtractService {
         }
 
         MessageValidationSnapshot snapshot = snapshotOptional.get();
-        if (!snapshot.isAllValid()) {
+        if (!canBeConfirmed(snapshot)) {
             throw new IllegalArgumentException("Only all-valid validation results can be confirmed.");
         }
 
@@ -196,6 +196,16 @@ public class ExtractService {
                 .forEach(MessageValidationSnapshot::clearConfirmed);
         snapshot.markConfirmed();
         return Optional.of(toResponse(snapshot));
+    }
+
+    private boolean canBeConfirmed(MessageValidationSnapshot snapshot) {
+        if (snapshot.isAllValid()) {
+            return true;
+        }
+        return ("COMPARISON".equals(snapshot.getTaskType())
+                || "QUESTION".equals(snapshot.getTaskType())
+                || "UNSUPPORTED".equals(snapshot.getTaskType()))
+                && !VALIDATION_AI_ERROR.equals(snapshot.getValidationStatus());
     }
 
     // requestId로 단건 조회한다.

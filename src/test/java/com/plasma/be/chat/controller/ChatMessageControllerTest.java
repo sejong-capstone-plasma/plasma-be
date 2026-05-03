@@ -5,8 +5,12 @@ import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
+import com.plasma.be.optimize.client.OptimizeClient;
+import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
+import com.plasma.be.question.client.QuestionClient;
+import com.plasma.be.question.client.dto.QuestionAnswerResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +23,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -47,6 +53,12 @@ class ChatMessageControllerTest {
     @MockitoBean
     private PredictClient predictClient;
 
+    @MockitoBean
+    private OptimizeClient optimizeClient;
+
+    @MockitoBean
+    private QuestionClient questionClient;
+
     @BeforeEach
     void setUp() {
         snapshotRepository.deleteAll();
@@ -54,6 +66,8 @@ class ChatMessageControllerTest {
         chatSessionRepository.deleteAll();
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
         when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString())).thenReturn(validPredictionResponse());
+        when(optimizeClient.requestOptimizePipeline(any())).thenReturn(validOptimizationResponse());
+        when(questionClient.requestAnswer(anyString(), any())).thenReturn(aiQuestionAnswerResponse());
     }
 
     @Test
@@ -216,6 +230,341 @@ class ChatMessageControllerTest {
     }
 
     @Test
+    void taskType이_비어있으면_confirm에서_요청한_PREDICTION을_실행한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(noTaskTypeAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-no-task-predict",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "PREDICTION"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.optimization").isEmpty());
+    }
+
+    @Test
+    void taskType이_비어있으면_confirm에서_요청한_OPTIMIZATION을_실행한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(noTaskTypeAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-no-task-opt",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "OPTIMIZATION"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.optimization.summary").value("optimized"))
+                .andExpect(jsonPath("$.prediction").isEmpty());
+    }
+
+    @Test
+    void taskType이_비어있고_confirm요청에도_선택이_없으면_400이다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(noTaskTypeAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-no-task-missing",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("requestedTaskType is required when taskType is not inferred."));
+    }
+
+    @Test
+    void confirm후_OPTIMIZATION_결과를_함께_반환한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(optimizationAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-optimization",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 조건에서 최적화해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.optimization.summary").value("optimized"))
+                .andExpect(jsonPath("$.prediction").isEmpty())
+                .andExpect(jsonPath("$.comparison").isEmpty());
+    }
+
+    @Test
+    void confirm후_COMPARISON_직접_두조건을_비교할_수_있다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonAiResponse());
+        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString()))
+                .thenAnswer(invocation -> predictionFromParams(invocation.getArgument(1)));
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-inline",
+                                  "inputText": "압력 10 소스 파워 500 바이어스 파워 200 일 때랑 압력 5 소스 파워 200 바이어스 파워 400일 때를 비교해줘."
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(5.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(400.0))
+                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(605.0));
+    }
+
+    @Test
+    void confirm후_COMPARISON_그조건과_새조건을_비교할_수_있다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString()))
+                .thenAnswer(invocation -> predictionFromParams(invocation.getArgument(1)));
+
+        String baseBody = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-history",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 식각률 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long baseMessageId = JsonTestHelper.readLong(baseBody, "messageId");
+        long baseValidationId = JsonTestHelper.readLong(baseBody, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", baseMessageId, baseValidationId)
+                        .session(browserSession))
+                .andExpect(status().isOk());
+
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonAiResponse());
+
+        String compareBody = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-history",
+                                  "inputText": "그 조건이랑 압력 10 소스 파워 500 바이어스 파워 200일 때를 비교해줘."
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(compareBody, "messageId");
+        long validationId = JsonTestHelper.readLong(compareBody, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comparison.left.label").value("latest_confirmed"))
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(50.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(800.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(710.0));
+    }
+
+    @Test
+    void confirm후_COMPARISON_그조건의_변화량_비교를_할_수_있다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString()))
+                .thenAnswer(invocation -> predictionFromParams(invocation.getArgument(1)));
+
+        String baseBody = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-patch",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 식각률 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long baseMessageId = JsonTestHelper.readLong(baseBody, "messageId");
+        long baseValidationId = JsonTestHelper.readLong(baseBody, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", baseMessageId, baseValidationId)
+                        .session(browserSession))
+                .andExpect(status().isOk());
+
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonAiResponse());
+
+        String compareBody = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-patch",
+                                  "inputText": "그 조건에서 소스파워가 100 높아졌을 때를 비교해줘."
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(compareBody, "messageId");
+        long validationId = JsonTestHelper.readLong(compareBody, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(800.0))
+                .andExpect(jsonPath("$.comparison.right.label").value("patched_latest"))
+                .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(900.0))
+                .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0));
+    }
+
+    @Test
+    void confirm후_QUESTION_시스템질문은_로컬응답을_반환한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(questionAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-question-system",
+                                  "inputText": "내가 입력할 수 있는 압력 범위가 뭐야?"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.question.answerSource").value("SYSTEM"))
+                .andExpect(jsonPath("$.question.answerText").value(org.hamcrest.Matchers.containsString("별도로 강제하지 않습니다")));
+
+        verify(questionClient, never()).requestAnswer(anyString(), any());
+    }
+
+    @Test
+    void confirm후_QUESTION_일반질문은_AI응답을_반환한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(questionAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-question-ai",
+                                  "inputText": "ion flux가 뭐야?"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.question.answerSource").value("AI"))
+                .andExpect(jsonPath("$.question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
+
+        verify(questionClient).requestAnswer(anyString(), any());
+    }
+
+    @Test
     void getSessionList_및_getMessageList() throws Exception {
         MockHttpSession browserA = browserSession("browser-a");
         MockHttpSession browserB = browserSession("browser-b");
@@ -344,6 +693,87 @@ class ChatMessageControllerTest {
                         new PredictPipelineResponse.ValueWithUnit(7.89, "score")
                 ),
                 new PredictPipelineResponse.Explanation("예측 요약", java.util.List.of("설명1", "설명2"))
+        );
+    }
+
+    private ExtractedParameterData optimizationAiResponse() {
+        return new ExtractedParameterData(
+                "req-opt-001", "VALID", "ETCH", "OPTIMIZATION",
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                new ExtractedParameterData.CurrentOutputs(
+                        new ExtractedParameterData.ValueWithUnit(120.0, "nm/min")
+                )
+        );
+    }
+
+    private ExtractedParameterData comparisonAiResponse() {
+        return new ExtractedParameterData(
+                "req-cmp-001", "INVALID_FIELD", "ETCH", "COMPARISON",
+                null,
+                null
+        );
+    }
+
+    private OptimizePipelineResponse validOptimizationResponse() {
+        return new OptimizePipelineResponse(java.util.Map.of(
+                "summary", "optimized",
+                "recommendation", java.util.Map.of(
+                        "pressure", 45.0,
+                        "source_power", 820.0,
+                        "bias_power", 95.0
+                )
+        ));
+    }
+
+    private ExtractedParameterData questionAiResponse() {
+        return new ExtractedParameterData(
+                "req-question-001", "VALID", null, "QUESTION",
+                null,
+                null
+        );
+    }
+
+    private ExtractedParameterData noTaskTypeAiResponse() {
+        return new ExtractedParameterData(
+                "req-no-task-001", "VALID", "ETCH", null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                null
+        );
+    }
+
+    private QuestionAnswerResponse aiQuestionAnswerResponse() {
+        return new QuestionAnswerResponse(
+                "question-001",
+                "ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다.",
+                "AI",
+                java.util.List.of("plasma-dictionary")
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private PredictPipelineResponse predictionFromParams(Object rawParams) {
+        java.util.Map<String, Double> params = (java.util.Map<String, Double>) rawParams;
+        double pressure = params.getOrDefault("pressure", 0.0);
+        double sourcePower = params.getOrDefault("source_power", 0.0);
+        double biasPower = params.getOrDefault("bias_power", 0.0);
+
+        return new PredictPipelineResponse(
+                "predict-dynamic",
+                "ETCH",
+                new PredictPipelineResponse.PredictionResult(
+                        new PredictPipelineResponse.ValueWithUnit(pressure, "a.u."),
+                        new PredictPipelineResponse.ValueWithUnit(sourcePower, "eV"),
+                        new PredictPipelineResponse.ValueWithUnit(pressure + sourcePower + biasPower, "score")
+                ),
+                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
         );
     }
 }
