@@ -35,3 +35,6 @@ application-secret.yml
 
 ### VS Code ###
 .vscode/
+
+### Plasma simulation data ###
+plasma-data/
