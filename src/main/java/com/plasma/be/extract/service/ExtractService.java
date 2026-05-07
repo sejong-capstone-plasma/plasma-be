@@ -30,6 +30,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -109,12 +110,10 @@ public class ExtractService {
     public ParameterValidationResponse validateCorrection(Long messageId, ParameterValidationRequest request) {
         ChatMessage message = getManagedMessage(messageId);
         Map<String, SubmittedParam> submittedParams = normalizeSubmittedParams(request);
-
-        Optional<MessageValidationSnapshot> latestSnapshot =
-                snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(messageId);
-        int attemptNo = latestSnapshot.map(s -> s.getAttemptNo() + 1).orElse(1);
-        String processType = latestSnapshot.map(MessageValidationSnapshot::getProcessType).orElse(null);
-        String taskType = latestSnapshot.map(MessageValidationSnapshot::getTaskType).orElse(null);
+        List<MessageValidationSnapshot> snapshots = snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(messageId);
+        int attemptNo = snapshots.isEmpty() ? 1 : snapshots.get(snapshots.size() - 1).getAttemptNo() + 1;
+        String processType = findLatestNonEmptyValue(snapshots, MessageValidationSnapshot::getProcessType);
+        String taskType = findLatestNonEmptyValue(snapshots, MessageValidationSnapshot::getTaskType);
 
         Map<String, Double> paramValues = submittedParams.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().value()));
@@ -512,6 +511,17 @@ public class ExtractService {
         return snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(messageId)
                 .map(snapshot -> snapshot.getAttemptNo() + 1)
                 .orElse(1);
+    }
+
+    private String findLatestNonEmptyValue(List<MessageValidationSnapshot> snapshots,
+                                           Function<MessageValidationSnapshot, String> selector) {
+        for (int index = snapshots.size() - 1; index >= 0; index--) {
+            String value = sanitize(selector.apply(snapshots.get(index)), null);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private Map<String, ExtractedParameterData.ValidatedParam> extractAiParams(ExtractedParameterData data) {

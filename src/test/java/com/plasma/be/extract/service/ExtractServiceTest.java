@@ -83,7 +83,7 @@ class ExtractServiceTest {
     @Test
     void validateCorrection_사용자입력값을_기반으로_재검증한다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
-        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(anyLong())).thenReturn(List.of());
         when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -103,8 +103,8 @@ class ExtractServiceTest {
     @Test
     void validateCorrection_AI가_UNSUPPORTED를_주더라도_기존_taskType을_유지한다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
-        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong()))
-                .thenReturn(Optional.of(validSnapshot()));
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(anyLong()))
+                .thenReturn(List.of(validSnapshot()));
         when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(unsupportedButAllParamsValidResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -126,8 +126,8 @@ class ExtractServiceTest {
     @Test
     void validateCorrection_기존_taskType이_있으면_AI_재검증에도_그값을_보낸다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
-        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong()))
-                .thenReturn(Optional.of(validSnapshot()));
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(anyLong()))
+                .thenReturn(List.of(validSnapshot()));
         when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -140,6 +140,30 @@ class ExtractServiceTest {
         extractService.validateCorrection(1L, request);
 
         verify(extractClient).requestValidation(any(), argThat("PREDICTION"::equals), any(), any());
+    }
+
+    @Test
+    void validateCorrection_최신_실패스냅샷의_taskType이_null이어도_이전_nonNull_taskType을_사용한다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(anyLong()))
+                .thenReturn(List.of(unsupportedExtractSnapshot(), failedCorrectionSnapshot()));
+        when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ParameterValidationRequest request = new ParameterValidationRequest(List.of(
+                new ParameterInputRequest("pressure", 50.0, "mTorr"),
+                new ParameterInputRequest("source_power", 800.0, "W"),
+                new ParameterInputRequest("bias_power", 100.0, "W")
+        ));
+
+        extractService.validateCorrection(1L, request);
+
+        verify(extractClient).requestValidation(
+                argThat("ETCH"::equals),
+                argThat("UNSUPPORTED"::equals),
+                any(),
+                any()
+        );
     }
 
     @Test
@@ -337,6 +361,48 @@ class ExtractServiceTest {
         snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 50.0, "mTorr", "VALID", 0));
         snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "VALID", 1));
         snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "VALID", 2));
+        return snapshot;
+    }
+
+    private MessageValidationSnapshot unsupportedExtractSnapshot() {
+        MessageValidationSnapshot snapshot = MessageValidationSnapshot.create(
+                dummyChatMessage(),
+                "req-unsupported",
+                1,
+                "AI_EXTRACT",
+                "UNSUPPORTED",
+                "ETCH",
+                "UNSUPPORTED",
+                null,
+                null,
+                null,
+                null,
+                LocalDateTime.now()
+        );
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", null, "mTorr", "MISSING", 0));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "VALID", 1));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "VALID", 2));
+        return snapshot;
+    }
+
+    private MessageValidationSnapshot failedCorrectionSnapshot() {
+        MessageValidationSnapshot snapshot = MessageValidationSnapshot.create(
+                dummyChatMessage(),
+                "req-failed-correction",
+                2,
+                "USER_CORRECTION",
+                "AI_ERROR",
+                null,
+                null,
+                null,
+                null,
+                null,
+                "422 Unprocessable Entity",
+                LocalDateTime.now()
+        );
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 50.0, "mTorr", "AI_ERROR", 0));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "AI_ERROR", 1));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "AI_ERROR", 2));
         return snapshot;
     }
 
