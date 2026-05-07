@@ -1,14 +1,13 @@
 package com.plasma.be.compare.service;
 
 import com.plasma.be.chat.entity.ChatMessage;
+import com.plasma.be.compare.client.CompareClient;
 import com.plasma.be.compare.dto.ComparisonResponse;
 import com.plasma.be.extract.dto.ParameterFieldResponse;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
 import com.plasma.be.extract.entity.MessageValidationParam;
 import com.plasma.be.extract.entity.MessageValidationSnapshot;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
-import com.plasma.be.predict.client.PredictClient;
-import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -55,12 +54,12 @@ public class ComparisonService {
     );
 
     private final MessageValidationSnapshotRepository snapshotRepository;
-    private final PredictClient predictClient;
+    private final CompareClient compareClient;
 
     public ComparisonService(MessageValidationSnapshotRepository snapshotRepository,
-                             PredictClient predictClient) {
+                             CompareClient compareClient) {
         this.snapshotRepository = snapshotRepository;
-        this.predictClient = predictClient;
+        this.compareClient = compareClient;
     }
 
     public ComparisonResponse compare(ChatMessage message, ParameterValidationResponse validation) {
@@ -78,15 +77,16 @@ public class ComparisonService {
         left = left.withProcessType(processType);
         right = right.withProcessType(processType);
 
-        PredictPipelineResponse leftPrediction = runPrediction(left, message.getInputText());
-        PredictPipelineResponse rightPrediction = runPrediction(right, message.getInputText());
-
-        return new ComparisonResponse(
-                new ComparisonResponse.ConditionResult(left.label(), left.processType(), left.toParameterResponses(), leftPrediction),
-                new ComparisonResponse.ConditionResult(right.label(), right.processType(), right.toParameterResponses(), rightPrediction),
-                buildDifference(leftPrediction, rightPrediction),
-                buildSummary(leftPrediction, rightPrediction)
+        ComparisonResponse upstream = compareClient.requestComparePipeline(
+                processType,
+                left.values(),
+                left.units(),
+                right.values(),
+                right.units(),
+                message.getInputText()
         );
+
+        return mergeResponse(upstream, left, right, processType);
     }
 
     private ParsedComparison parse(String inputText) {
@@ -191,71 +191,27 @@ public class ComparisonService {
         return new Condition("latest_confirmed", firstNonBlank(latest.getProcessType(), DEFAULT_PROCESS_TYPE), values, units);
     }
 
-    private PredictPipelineResponse runPrediction(Condition condition, String originalUserInput) {
-        return predictClient.requestPredictPipeline(
-                firstNonBlank(condition.processType(), DEFAULT_PROCESS_TYPE),
-                condition.values(),
-                condition.units(),
-                originalUserInput
+    private ComparisonResponse mergeResponse(ComparisonResponse upstream,
+                                             Condition left,
+                                             Condition right,
+                                             String processType) {
+        return new ComparisonResponse(
+                mergeConditionResult(left, processType, upstream == null ? null : upstream.left()),
+                mergeConditionResult(right, processType, upstream == null ? null : upstream.right()),
+                upstream == null ? null : upstream.difference(),
+                upstream == null ? null : upstream.summary()
         );
     }
 
-    private ComparisonResponse.Difference buildDifference(PredictPipelineResponse left,
-                                                          PredictPipelineResponse right) {
-        return new ComparisonResponse.Difference(
-                delta(metricValue(left, MetricType.ION_FLUX), metricValue(right, MetricType.ION_FLUX)),
-                firstNonBlank(metricUnit(right, MetricType.ION_FLUX), metricUnit(left, MetricType.ION_FLUX), null),
-                delta(metricValue(left, MetricType.ION_ENERGY), metricValue(right, MetricType.ION_ENERGY)),
-                firstNonBlank(metricUnit(right, MetricType.ION_ENERGY), metricUnit(left, MetricType.ION_ENERGY), null),
-                delta(metricValue(left, MetricType.ETCH_SCORE), metricValue(right, MetricType.ETCH_SCORE)),
-                firstNonBlank(metricUnit(right, MetricType.ETCH_SCORE), metricUnit(left, MetricType.ETCH_SCORE), null)
+    private ComparisonResponse.ConditionResult mergeConditionResult(Condition condition,
+                                                                   String processType,
+                                                                   ComparisonResponse.ConditionResult upstream) {
+        return new ComparisonResponse.ConditionResult(
+                condition.label(),
+                firstNonBlank(condition.processType(), upstream == null ? null : upstream.processType(), processType),
+                condition.toParameterResponses(),
+                upstream == null ? null : upstream.prediction()
         );
-    }
-
-    private String buildSummary(PredictPipelineResponse left, PredictPipelineResponse right) {
-        Double etchDelta = delta(metricValue(left, MetricType.ETCH_SCORE), metricValue(right, MetricType.ETCH_SCORE));
-        String unit = firstNonBlank(metricUnit(right, MetricType.ETCH_SCORE), metricUnit(left, MetricType.ETCH_SCORE), "");
-        if (etchDelta == null) {
-            return "Compared 2 conditions.";
-        }
-        if (etchDelta > 0) {
-            return "Right condition etch_score is %.3f %s higher.".formatted(etchDelta, unit).trim();
-        }
-        if (etchDelta < 0) {
-            return "Right condition etch_score is %.3f %s lower.".formatted(Math.abs(etchDelta), unit).trim();
-        }
-        return "Compared 2 conditions with identical etch_score.";
-    }
-
-    private Double delta(Double left, Double right) {
-        if (left == null || right == null) {
-            return null;
-        }
-        return right - left;
-    }
-
-    private Double metricValue(PredictPipelineResponse response, MetricType type) {
-        if (response == null || response.predictionResult() == null) {
-            return null;
-        }
-        PredictPipelineResponse.ValueWithUnit value = switch (type) {
-            case ION_FLUX -> response.predictionResult().ionFlux();
-            case ION_ENERGY -> response.predictionResult().ionEnergy();
-            case ETCH_SCORE -> response.predictionResult().etchScore();
-        };
-        return value == null ? null : value.value();
-    }
-
-    private String metricUnit(PredictPipelineResponse response, MetricType type) {
-        if (response == null || response.predictionResult() == null) {
-            return null;
-        }
-        PredictPipelineResponse.ValueWithUnit value = switch (type) {
-            case ION_FLUX -> response.predictionResult().ionFlux();
-            case ION_ENERGY -> response.predictionResult().ionEnergy();
-            case ETCH_SCORE -> response.predictionResult().etchScore();
-        };
-        return value == null ? null : value.unit();
     }
 
     @SafeVarargs
@@ -272,12 +228,6 @@ public class ComparisonService {
             }
         }
         return null;
-    }
-
-    private enum MetricType {
-        ION_FLUX,
-        ION_ENERGY,
-        ETCH_SCORE
     }
 
     private enum OperandType {

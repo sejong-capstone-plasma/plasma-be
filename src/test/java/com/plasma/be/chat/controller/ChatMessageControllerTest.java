@@ -2,6 +2,8 @@ package com.plasma.be.chat.controller;
 
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
+import com.plasma.be.compare.client.CompareClient;
+import com.plasma.be.compare.dto.ComparisonResponse;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
@@ -57,6 +59,9 @@ class ChatMessageControllerTest {
     private OptimizeClient optimizeClient;
 
     @MockitoBean
+    private CompareClient compareClient;
+
+    @MockitoBean
     private QuestionClient questionClient;
 
     @BeforeEach
@@ -67,6 +72,8 @@ class ChatMessageControllerTest {
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
         when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString())).thenReturn(validPredictionResponse());
         when(optimizeClient.requestOptimizePipeline(any())).thenReturn(validOptimizationResponse());
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+                .thenReturn(validComparisonResponse());
         when(questionClient.requestAnswer(anyString(), any())).thenReturn(aiQuestionAnswerResponse());
     }
 
@@ -361,8 +368,8 @@ class ChatMessageControllerTest {
     void confirm후_COMPARISON_직접_두조건을_비교할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonAiResponse());
-        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString()))
-                .thenAnswer(invocation -> predictionFromParams(invocation.getArgument(1)));
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+                .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
@@ -394,8 +401,8 @@ class ChatMessageControllerTest {
     @Test
     void confirm후_COMPARISON_그조건과_새조건을_비교할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
-        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString()))
-                .thenAnswer(invocation -> predictionFromParams(invocation.getArgument(1)));
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+                .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String baseBody = mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
@@ -450,8 +457,8 @@ class ChatMessageControllerTest {
     @Test
     void confirm후_COMPARISON_그조건의_변화량_비교를_할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
-        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString()))
-                .thenAnswer(invocation -> predictionFromParams(invocation.getArgument(1)));
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+                .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String baseBody = mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
@@ -729,6 +736,13 @@ class ChatMessageControllerTest {
         ));
     }
 
+    private ComparisonResponse validComparisonResponse() {
+        return comparisonFromParams(
+                java.util.Map.of("pressure", 50.0, "source_power", 800.0, "bias_power", 100.0),
+                java.util.Map.of("pressure", 10.0, "source_power", 500.0, "bias_power", 200.0)
+        );
+    }
+
     private ExtractedParameterData questionAiResponse() {
         return new ExtractedParameterData(
                 "req-question-001", "VALID", null, "QUESTION",
@@ -759,8 +773,31 @@ class ChatMessageControllerTest {
     }
 
     @SuppressWarnings("unchecked")
-    private PredictPipelineResponse predictionFromParams(Object rawParams) {
-        java.util.Map<String, Double> params = (java.util.Map<String, Double>) rawParams;
+    private ComparisonResponse comparisonFromParams(Object rawLeftParams, Object rawRightParams) {
+        java.util.Map<String, Double> leftParams = (java.util.Map<String, Double>) rawLeftParams;
+        java.util.Map<String, Double> rightParams = (java.util.Map<String, Double>) rawRightParams;
+
+        PredictPipelineResponse leftPrediction = predictionFromParams(leftParams);
+        PredictPipelineResponse rightPrediction = predictionFromParams(rightParams);
+        double etchScoreDelta = rightPrediction.predictionResult().etchScore().value()
+                - leftPrediction.predictionResult().etchScore().value();
+
+        return new ComparisonResponse(
+                new ComparisonResponse.ConditionResult("left", "ETCH", java.util.List.of(), leftPrediction),
+                new ComparisonResponse.ConditionResult("right", "ETCH", java.util.List.of(), rightPrediction),
+                new ComparisonResponse.Difference(
+                        delta(leftPrediction.predictionResult().ionFlux().value(), rightPrediction.predictionResult().ionFlux().value()),
+                        "a.u.",
+                        delta(leftPrediction.predictionResult().ionEnergy().value(), rightPrediction.predictionResult().ionEnergy().value()),
+                        "eV",
+                        etchScoreDelta,
+                        "score"
+                ),
+                "비교 완료"
+        );
+    }
+
+    private PredictPipelineResponse predictionFromParams(java.util.Map<String, Double> params) {
         double pressure = params.getOrDefault("pressure", 0.0);
         double sourcePower = params.getOrDefault("source_power", 0.0);
         double biasPower = params.getOrDefault("bias_power", 0.0);
@@ -775,5 +812,9 @@ class ChatMessageControllerTest {
                 ),
                 new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
         );
+    }
+
+    private double delta(double left, double right) {
+        return right - left;
     }
 }
