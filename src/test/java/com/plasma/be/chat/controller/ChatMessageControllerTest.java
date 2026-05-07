@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -416,6 +417,8 @@ class ChatMessageControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
                 .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89));
+
+        verify(predictClient).requestPredictPipeline(eq("ETCH"), any(), any(), anyString());
     }
 
     @Test

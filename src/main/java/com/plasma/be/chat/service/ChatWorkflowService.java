@@ -98,46 +98,46 @@ public class ChatWorkflowService {
         if ("COMPARISON".equals(taskType)) {
             try {
                 ComparisonResponse comparison = comparisonService.compare(message, validation);
-                return new ConfirmResponse(validation, null, null, comparison, null, null);
+                return new ConfirmResponse(validation, null, null, comparison, null, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, null, null, null, null, null, e.getMessage());
             }
         }
         if ("OPTIMIZATION".equals(taskType)) {
             try {
                 OptimizePipelineResponse optimization = runOptimizePipeline(message, validation);
-                return new ConfirmResponse(validation, null, optimization, null, null, null);
+                return new ConfirmResponse(validation, null, optimization, null, null, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, null, null, null, null, null, e.getMessage());
             }
         }
         if ("QUESTION".equals(taskType)) {
             try {
                 QuestionAnswerResponse question = questionService.answer(message);
-                return new ConfirmResponse(validation, null, null, null, question, null);
+                return new ConfirmResponse(validation, null, null, null, question, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, null, null, null, null, null, e.getMessage());
             }
         }
         if ("UNSUPPORTED".equals(taskType)) {
-            return new ConfirmResponse(validation, null, null, null, null, null);
+            return new ConfirmResponse(validation, null, null, null, null, null, null);
         }
         if (!StringUtils.hasText(taskType)) {
             throw new IllegalArgumentException("requestedTaskType is required when taskType is not inferred.");
         }
         if (!"PREDICTION".equals(taskType)) {
-            return new ConfirmResponse(validation, null, null, null, null, null);
+            return new ConfirmResponse(validation, null, null, null, null, null, null);
         }
 
         try {
             PredictPipelineResponse prediction = runPredictPipeline(message, validation);
             ParameterValidationResponse updatedValidation =
                     extractService.storePredictionOutcome(messageId, validationId, prediction, null);
-            return new ConfirmResponse(updatedValidation, prediction, null, null, null, null);
+            return new ConfirmResponse(updatedValidation, prediction, null, null, null, null, null);
         } catch (RestClientException e) {
             ParameterValidationResponse updatedValidation =
                     extractService.storePredictionOutcome(messageId, validationId, null, e.getMessage());
-            return new ConfirmResponse(updatedValidation, null, null, null, null, e.getMessage());
+            return new ConfirmResponse(updatedValidation, null, null, null, null, e.getMessage(), e.getMessage());
         }
     }
 
@@ -176,8 +176,13 @@ public class ChatWorkflowService {
                 .filter(p -> p.unit() != null)
                 .collect(Collectors.toMap(ParameterFieldResponse::key, ParameterFieldResponse::unit));
 
+        String normalizedProcessType = validation.processType();
+        if (!StringUtils.hasText(normalizedProcessType) || "UNKNOWN".equalsIgnoreCase(normalizedProcessType)) {
+            normalizedProcessType = "ETCH";
+        }
+
         return predictClient.requestPredictPipeline(
-                validation.processType() != null ? validation.processType() : "ETCH",
+                normalizedProcessType,
                 paramValues,
                 paramUnits,
                 message.getInputText()

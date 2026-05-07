@@ -12,6 +12,7 @@ public record ConfirmResponse(
         OptimizePipelineResponse optimization,
         ComparisonResponse comparison,
         QuestionAnswerResponse question,
+        String predictionError,
         String executionError
 ) {
 }
