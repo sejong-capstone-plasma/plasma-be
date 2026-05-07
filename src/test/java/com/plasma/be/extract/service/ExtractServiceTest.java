@@ -248,6 +248,8 @@ class ExtractServiceTest {
                         new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
+                null,
+                null,
                 null
         );
     }
@@ -260,6 +262,8 @@ class ExtractServiceTest {
                         new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
+                null,
+                null,
                 null
         );
     }
@@ -274,7 +278,9 @@ class ExtractServiceTest {
                 ),
                 new ExtractedParameterData.CurrentOutputs(
                         new ExtractedParameterData.ValueWithUnit(null, "无")
-                )
+                ),
+                null,
+                null
         );
     }
 
@@ -286,6 +292,8 @@ class ExtractServiceTest {
                         new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
+                null,
+                null,
                 null
         );
     }

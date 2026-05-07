@@ -1,8 +1,11 @@
 package com.plasma.be.compare.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.compare.client.CompareClient;
 import com.plasma.be.compare.dto.ComparisonResponse;
+import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.dto.ParameterFieldResponse;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
 import com.plasma.be.extract.entity.MessageValidationParam;
@@ -55,6 +58,7 @@ public class ComparisonService {
 
     private final MessageValidationSnapshotRepository snapshotRepository;
     private final CompareClient compareClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ComparisonService(MessageValidationSnapshotRepository snapshotRepository,
                              CompareClient compareClient) {
@@ -63,7 +67,7 @@ public class ComparisonService {
     }
 
     public ComparisonResponse compare(ChatMessage message, ParameterValidationResponse validation) {
-        ParsedComparison parsed = parse(message.getInputText());
+        ParsedComparison parsed = parse(message, validation);
 
         Condition left = resolveCondition(parsed.left(), message);
         Condition right = resolveCondition(parsed.right(), message);
@@ -89,10 +93,57 @@ public class ComparisonService {
         return mergeResponse(upstream, left, right, processType);
     }
 
-    private ParsedComparison parse(String inputText) {
+    private ParsedComparison parse(ChatMessage message, ParameterValidationResponse validation) {
+        ParsedComparison parsedFromExtract = parseFromExtract(message.getInputText(), validation);
+        if (parsedFromExtract != null) {
+            return parsedFromExtract;
+        }
+        return parseLegacy(message.getInputText());
+    }
+
+    private ParsedComparison parseFromExtract(String inputText, ParameterValidationResponse validation) {
+        if (validation == null || validation.validationId() == null) {
+            return null;
+        }
+
+        Optional<MessageValidationSnapshot> snapshot = snapshotRepository.findByValidationId(validation.validationId());
+        if (snapshot.isEmpty()) {
+            return null;
+        }
+
+        ExtractedParameterData.ProcessParams conditionA = readProcessParams(snapshot.get().getConditionAJson());
+        ExtractedParameterData.ProcessParams conditionB = readProcessParams(snapshot.get().getConditionBJson());
+        if (conditionA == null && conditionB == null) {
+            return null;
+        }
+
+        if (conditionA != null && conditionB != null) {
+            return new ParsedComparison(
+                    Operand.inline(toCondition("condition_a", conditionA)),
+                    Operand.inline(toCondition("condition_b", conditionB))
+            );
+        }
+
+        int latestRefIndex = safeIndexOf(inputText, "그 조건");
+        if (latestRefIndex < 0) {
+            return null;
+        }
+
+        Condition extractedCondition = toCondition(
+                conditionA != null ? "condition_a" : "condition_b",
+                conditionA != null ? conditionA : conditionB
+        );
+        List<InlineConditionMatch> inlineConditions = parseInlineConditions(inputText);
+        if (!inlineConditions.isEmpty() && latestRefIndex < inlineConditions.get(0).startIndex()) {
+            return new ParsedComparison(Operand.latestConfirmed(), Operand.inline(extractedCondition));
+        }
+        return new ParsedComparison(Operand.inline(extractedCondition), Operand.latestConfirmed());
+    }
+
+    private ParsedComparison parseLegacy(String inputText) {
         String text = inputText == null ? "" : inputText;
         List<InlineConditionMatch> inlineConditions = parseInlineConditions(text);
-        int latestRefIndex = text.indexOf("그 조건");
+        int latestRefIndex = safeIndexOf(text, "그 조건");
 
         if (inlineConditions.size() >= 2) {
             return new ParsedComparison(
@@ -119,6 +170,10 @@ public class ComparisonService {
         throw new IllegalArgumentException(
                 "Unsupported comparison request. Provide two explicit conditions or compare against the latest confirmed condition."
         );
+    }
+
+    private int safeIndexOf(String text, String token) {
+        return text == null ? -1 : text.indexOf(token);
     }
 
     private List<InlineConditionMatch> parseInlineConditions(String text) {
@@ -151,6 +206,36 @@ public class ComparisonService {
             return new ParameterPatch(rule.parameterKey(), delta);
         }
         return null;
+    }
+
+    private ExtractedParameterData.ProcessParams readProcessParams(String json) {
+        if (!StringUtils.hasText(json)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, ExtractedParameterData.ProcessParams.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to read stored comparison conditions.", exception);
+        }
+    }
+
+    private Condition toCondition(String label, ExtractedParameterData.ProcessParams processParams) {
+        Map<String, Double> values = new LinkedHashMap<>();
+        Map<String, String> units = new LinkedHashMap<>();
+        putParam(values, units, "pressure", processParams.pressure());
+        putParam(values, units, "source_power", processParams.sourcePower());
+        putParam(values, units, "bias_power", processParams.biasPower());
+        return new Condition(label, null, values, units);
+    }
+
+    private void putParam(Map<String, Double> values,
+                          Map<String, String> units,
+                          String key,
+                          ExtractedParameterData.ValidatedParam param) {
+        values.put(key, param == null ? null : param.value());
+        units.put(key, param == null || !StringUtils.hasText(param.unit())
+                ? DEFAULT_UNITS.getOrDefault(key, "")
+                : param.unit());
     }
 
     private boolean isPositiveVerb(String verb) {

@@ -1,5 +1,8 @@
 package com.plasma.be.extract.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +24,7 @@ public class ExtractClient {
     private final String validateEndpoint;
     private final int timeout;
     private final RestClient httpClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private int lastResponseStatus;
 
     public ExtractClient(
@@ -77,12 +81,13 @@ public class ExtractClient {
 
     ExtractedParameterData sendRequest(Map<String, Object> body) {
         try {
-            ExtractedParameterData response = httpClient.post()
+            String responseBody = httpClient.post()
                     .uri(extractEndpoint)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
-                    .body(ExtractedParameterData.class);
+                    .body(String.class);
+            ExtractedParameterData response = parseResponse(responseBody);
             this.lastResponseStatus = 200;
             return response;
         } catch (RestClientException e) {
@@ -93,17 +98,34 @@ public class ExtractClient {
 
     private ExtractedParameterData sendValidateRequest(Map<String, Object> body) {
         try {
-            ExtractedParameterData response = httpClient.post()
+            String responseBody = httpClient.post()
                     .uri(validateEndpoint)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
-                    .body(ExtractedParameterData.class);
+                    .body(String.class);
+            ExtractedParameterData response = parseResponse(responseBody);
             this.lastResponseStatus = 200;
             return response;
         } catch (RestClientException e) {
             handleClientError(e.getMessage());
             throw e;
+        }
+    }
+
+    ExtractedParameterData parseResponse(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode payload = root.has("extract") ? root.get("extract") : root;
+            if (payload == null || payload.isNull()) {
+                return null;
+            }
+            return objectMapper.treeToValue(payload, ExtractedParameterData.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to parse extract response.", exception);
         }
     }
 

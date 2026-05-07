@@ -367,7 +367,7 @@ class ChatMessageControllerTest {
     @Test
     void confirm후_COMPARISON_직접_두조건을_비교할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
-        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonAiResponse());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(directComparisonAiResponse());
         when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
@@ -391,11 +391,11 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(10.0))
-                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
-                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(5.0))
-                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(400.0))
-                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(605.0));
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(11.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(501.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(6.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(401.0))
+                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(608.0));
     }
 
     @Test
@@ -425,7 +425,7 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk());
 
-        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonAiResponse());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(latestAndNewComparisonAiResponse());
 
         String compareBody = mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
@@ -450,8 +450,8 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.comparison.left.label").value("latest_confirmed"))
                 .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(50.0))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(800.0))
-                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
-                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(710.0));
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(11.0))
+                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(713.0));
     }
 
     @Test
@@ -481,7 +481,7 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk());
 
-        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonAiResponse());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonFallbackAiResponse());
 
         String compareBody = mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
@@ -674,6 +674,8 @@ class ChatMessageControllerTest {
                         new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
+                null,
+                null,
                 null
         );
     }
@@ -686,6 +688,8 @@ class ChatMessageControllerTest {
                         new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
+                null,
+                null,
                 null
         );
     }
@@ -713,13 +717,49 @@ class ChatMessageControllerTest {
                 ),
                 new ExtractedParameterData.CurrentOutputs(
                         new ExtractedParameterData.ValueWithUnit(120.0, "nm/min")
+                ),
+                null,
+                null
+        );
+    }
+
+    private ExtractedParameterData directComparisonAiResponse() {
+        return new ExtractedParameterData(
+                "req-cmp-001", "VALID", "ETCH", "COMPARISON",
+                null,
+                null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(11.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(501.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(201.0, "W", "VALID")
+                ),
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(6.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(201.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(401.0, "W", "VALID")
                 )
         );
     }
 
-    private ExtractedParameterData comparisonAiResponse() {
+    private ExtractedParameterData latestAndNewComparisonAiResponse() {
         return new ExtractedParameterData(
-                "req-cmp-001", "INVALID_FIELD", "ETCH", "COMPARISON",
+                "req-cmp-002", "VALID", "ETCH", "COMPARISON",
+                null,
+                null,
+                null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(11.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(501.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(201.0, "W", "VALID")
+                )
+        );
+    }
+
+    private ExtractedParameterData comparisonFallbackAiResponse() {
+        return new ExtractedParameterData(
+                "req-cmp-fallback", "INVALID_FIELD", "ETCH", "COMPARISON",
+                null,
+                null,
                 null,
                 null
         );
@@ -747,6 +787,8 @@ class ChatMessageControllerTest {
         return new ExtractedParameterData(
                 "req-question-001", "VALID", null, "QUESTION",
                 null,
+                null,
+                null,
                 null
         );
     }
@@ -759,6 +801,8 @@ class ChatMessageControllerTest {
                         new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
+                null,
+                null,
                 null
         );
     }

@@ -76,9 +76,11 @@ public class CompareClient {
                                                Map<String, String> paramUnits) {
         Map<String, Object> condition = new LinkedHashMap<>();
         for (String key : List.of("pressure", "source_power", "bias_power")) {
+            Double value = paramValues.get(key);
+            String unit = paramUnits.get(key);
             condition.put(key, Map.of(
-                    "value", paramValues.getOrDefault(key, 0.0),
-                    "unit", paramUnits.getOrDefault(key, "")
+                    "value", value == null ? 0.0 : value,
+                    "unit", unit == null ? "" : unit
             ));
         }
         return condition;

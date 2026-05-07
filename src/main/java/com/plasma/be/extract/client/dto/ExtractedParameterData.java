@@ -8,7 +8,9 @@ public record ExtractedParameterData(
         @JsonProperty("process_type")    String processType,
         @JsonProperty("task_type")       String taskType,
         @JsonProperty("process_params")  ProcessParams processParams,
-        @JsonProperty("current_outputs") CurrentOutputs currentOutputs
+        @JsonProperty("current_outputs") CurrentOutputs currentOutputs,
+        @JsonProperty("condition_a")     ProcessParams conditionA,
+        @JsonProperty("condition_b")     ProcessParams conditionB
 ) {
 
     public record ProcessParams(

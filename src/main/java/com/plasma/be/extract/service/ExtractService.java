@@ -320,6 +320,10 @@ public class ExtractService {
                 null,
                 LocalDateTime.now()
         );
+        snapshot.storeComparisonConditions(
+                writeProcessParams(data.conditionA()),
+                writeProcessParams(data.conditionB())
+        );
 
         items.forEach(snapshot::addItem);
         return snapshot;
@@ -465,6 +469,17 @@ public class ExtractService {
             return objectMapper.writeValueAsString(details == null ? List.of() : details);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to serialize prediction explanation details.", exception);
+        }
+    }
+
+    private String writeProcessParams(ExtractedParameterData.ProcessParams processParams) {
+        if (processParams == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(processParams);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize comparison conditions.", exception);
         }
     }
 

@@ -77,6 +77,12 @@ public class MessageValidationSnapshot {
     @Column(name = "failure_reason", columnDefinition = "TEXT")
     private String failureReason;
 
+    @Column(name = "condition_a_json", columnDefinition = "TEXT")
+    private String conditionAJson;
+
+    @Column(name = "condition_b_json", columnDefinition = "TEXT")
+    private String conditionBJson;
+
     // 예측 파이프라인 결과를 저장한다.
     @Column(name = "prediction_request_id", length = 36)
     private String predictionRequestId;
@@ -247,6 +253,19 @@ public class MessageValidationSnapshot {
 
     public String getFailureReason() {
         return failureReason;
+    }
+
+    public void storeComparisonConditions(String conditionAJson, String conditionBJson) {
+        this.conditionAJson = conditionAJson;
+        this.conditionBJson = conditionBJson;
+    }
+
+    public String getConditionAJson() {
+        return conditionAJson;
+    }
+
+    public String getConditionBJson() {
+        return conditionBJson;
     }
 
     public void storePrediction(String predictionRequestId,

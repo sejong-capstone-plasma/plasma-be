@@ -1,5 +1,6 @@
 package com.plasma.be.extract.client;
 
+import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
@@ -65,5 +66,54 @@ class ExtractClientTest {
 
         assertThat(handled).isFalse();
         assertThat(extractClient.getLastResponseStatus()).isEqualTo(503);
+    }
+
+    @Test
+    void parseResponse_extract래퍼_응답을_해석한다() {
+        ExtractedParameterData response = extractClient.parseResponse("""
+                {
+                  "extract": {
+                    "request_id": "req-001",
+                    "validation_status": "VALID",
+                    "process_type": "ETCH",
+                    "task_type": "COMPARISON",
+                    "condition_a": {
+                      "pressure": { "value": 11.0, "unit": "mTorr", "status": "VALID" },
+                      "source_power": { "value": 501.0, "unit": "W", "status": "VALID" },
+                      "bias_power": { "value": 201.0, "unit": "W", "status": "VALID" }
+                    },
+                    "condition_b": {
+                      "pressure": { "value": 6.0, "unit": "mTorr", "status": "VALID" },
+                      "source_power": { "value": 201.0, "unit": "W", "status": "VALID" },
+                      "bias_power": { "value": 401.0, "unit": "W", "status": "VALID" }
+                    }
+                  }
+                }
+                """);
+
+        assertThat(response.requestId()).isEqualTo("req-001");
+        assertThat(response.taskType()).isEqualTo("COMPARISON");
+        assertThat(response.conditionA().pressure().value()).isEqualTo(11.0);
+        assertThat(response.conditionB().biasPower().unit()).isEqualTo("W");
+    }
+
+    @Test
+    void parseResponse_직접응답도_해석한다() {
+        ExtractedParameterData response = extractClient.parseResponse("""
+                {
+                  "request_id": "req-002",
+                  "validation_status": "VALID",
+                  "process_type": "ETCH",
+                  "task_type": "PREDICTION",
+                  "process_params": {
+                    "pressure": { "value": 50.0, "unit": "mTorr", "status": "VALID" },
+                    "source_power": { "value": 800.0, "unit": "W", "status": "VALID" },
+                    "bias_power": { "value": 100.0, "unit": "W", "status": "VALID" }
+                  }
+                }
+                """);
+
+        assertThat(response.requestId()).isEqualTo("req-002");
+        assertThat(response.processParams().sourcePower().value()).isEqualTo(800.0);
     }
 }
