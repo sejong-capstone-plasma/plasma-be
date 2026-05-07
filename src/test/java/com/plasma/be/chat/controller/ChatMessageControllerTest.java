@@ -384,6 +384,77 @@ class ChatMessageControllerTest {
     }
 
     @Test
+    void taskType이_UNSUPPORTED면_confirm의_requestedTaskType을_우선한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(unsupportedAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-unsupported-confirm-request",
+                                  "inputText": "조건은 맞는데 어떤 작업인지 애매한 요청"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "PREDICTION"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
+                .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89));
+    }
+
+    @Test
+    void taskType이_UNSUPPORTED면_confirm의_requestedTaskType_OPTIMIZATION을_우선한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(unsupportedAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-unsupported-confirm-optimization",
+                                  "inputText": "조건은 맞는데 어떤 작업인지 애매한 요청"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "OPTIMIZATION"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
+                .andExpect(jsonPath("$.optimization.summary").value("optimized"))
+                .andExpect(jsonPath("$.prediction").isEmpty());
+    }
+
+    @Test
     void confirm후_OPTIMIZATION_결과를_함께_반환한다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(optimizationAiResponse());
@@ -859,6 +930,20 @@ class ChatMessageControllerTest {
     private ExtractedParameterData unsupportedButAllParamsValidResponse() {
         return new ExtractedParameterData(
                 "req-unsupported", "UNSUPPORTED", null, null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                null,
+                null,
+                null
+        );
+    }
+
+    private ExtractedParameterData unsupportedAiResponse() {
+        return new ExtractedParameterData(
+                "req-unsupported-ai", "UNSUPPORTED", "UNKNOWN", "UNSUPPORTED",
                 new ExtractedParameterData.ProcessParams(
                         new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
                         new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),

@@ -142,15 +142,27 @@ public class ChatWorkflowService {
     }
 
     private String resolveTaskType(String inferredTaskType, String requestedTaskType) {
-        if (StringUtils.hasText(inferredTaskType)) {
-            return inferredTaskType.trim().toUpperCase();
+        String normalizedRequested = normalizeRequestedTaskType(requestedTaskType);
+        String normalizedInferred = StringUtils.hasText(inferredTaskType)
+                ? inferredTaskType.trim().toUpperCase()
+                : null;
+
+        if ("UNSUPPORTED".equals(normalizedInferred) && normalizedRequested != null) {
+            return normalizedRequested;
         }
+        if (StringUtils.hasText(normalizedInferred)) {
+            return normalizedInferred;
+        }
+        return normalizedRequested;
+    }
+
+    private String normalizeRequestedTaskType(String requestedTaskType) {
         if (!StringUtils.hasText(requestedTaskType)) {
             return null;
         }
         String normalized = requestedTaskType.trim().toUpperCase();
-        if (!List.of("PREDICTION", "OPTIMIZATION").contains(normalized)) {
-            throw new IllegalArgumentException("requestedTaskType must be PREDICTION or OPTIMIZATION.");
+        if (!List.of("PREDICTION", "OPTIMIZATION", "COMPARISON", "QUESTION").contains(normalized)) {
+            throw new IllegalArgumentException("requestedTaskType must be PREDICTION, OPTIMIZATION, COMPARISON, or QUESTION.");
         }
         return normalized;
     }
