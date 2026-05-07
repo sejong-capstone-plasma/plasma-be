@@ -113,7 +113,9 @@ public class ExtractService {
                 snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(messageId);
         int attemptNo = latestSnapshot.map(s -> s.getAttemptNo() + 1).orElse(1);
         String processType = latestSnapshot.map(MessageValidationSnapshot::getProcessType).orElse(null);
-        String taskType    = latestSnapshot.map(MessageValidationSnapshot::getTaskType).orElse(null);
+        String taskType = latestSnapshot.map(MessageValidationSnapshot::getTaskType)
+                .map(this::normalizeTaskTypeForValidationRequest)
+                .orElse(null);
 
         Map<String, Double> paramValues = submittedParams.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().value()));
@@ -305,6 +307,11 @@ public class ExtractService {
                 validationStatus,
                 allParameterStatusesValid
         );
+        String effectiveTaskType = resolveTaskType(
+                sourceType,
+                sanitize(data.taskType(), null),
+                allParameterStatusesValid
+        );
 
         MessageValidationSnapshot snapshot = MessageValidationSnapshot.create(
                 message,
@@ -313,7 +320,7 @@ public class ExtractService {
                 sourceType,
                 effectiveValidationStatus,
                 sanitize(data.processType(), null),
-                sanitize(data.taskType(), null),
+                effectiveTaskType,
                 currentEr == null ? null : currentEr.value(),
                 currentEr == null ? null : sanitize(currentEr.unit(), null),
                 null,
@@ -593,6 +600,25 @@ public class ExtractService {
             return "VALID";
         }
         return validationStatus;
+    }
+
+    private String resolveTaskType(String sourceType,
+                                   String taskType,
+                                   boolean allParameterStatusesValid) {
+        if (SOURCE_USER_CORRECTION.equals(sourceType)
+                && allParameterStatusesValid
+                && "UNSUPPORTED".equals(taskType)) {
+            return null;
+        }
+        return taskType;
+    }
+
+    private String normalizeTaskTypeForValidationRequest(String taskType) {
+        String normalizedTaskType = sanitize(taskType, null);
+        if ("UNSUPPORTED".equals(normalizedTaskType)) {
+            return null;
+        }
+        return normalizedTaskType;
     }
 
     private String sanitize(String value, String defaultValue) {

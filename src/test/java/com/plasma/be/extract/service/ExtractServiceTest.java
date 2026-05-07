@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -117,8 +118,28 @@ class ExtractServiceTest {
 
         assertThat(response.sourceType()).isEqualTo("USER_CORRECTION");
         assertThat(response.validationStatus()).isEqualTo("VALID");
+        assertThat(response.taskType()).isNull();
         assertThat(response.allValid()).isTrue();
         assertThat(response.parameters()).allMatch(parameter -> "VALID".equals(parameter.status()));
+    }
+
+    @Test
+    void validateCorrection_기존_taskType이_UNSUPPORTED면_AI_재검증에는_null로_보낸다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong()))
+                .thenReturn(Optional.of(unsupportedSnapshot()));
+        when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ParameterValidationRequest request = new ParameterValidationRequest(List.of(
+                new ParameterInputRequest("pressure", 50.0, "mTorr"),
+                new ParameterInputRequest("source_power", 800.0, "W"),
+                new ParameterInputRequest("bias_power", 100.0, "W")
+        ));
+
+        extractService.validateCorrection(1L, request);
+
+        verify(extractClient).requestValidation(any(), isNull(), any(), any());
     }
 
     @Test
@@ -307,6 +328,27 @@ class ExtractServiceTest {
                 "VALID",
                 "ETCH",
                 "PREDICTION",
+                null,
+                null,
+                null,
+                null,
+                LocalDateTime.now()
+        );
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 50.0, "mTorr", "VALID", 0));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "VALID", 1));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "VALID", 2));
+        return snapshot;
+    }
+
+    private MessageValidationSnapshot unsupportedSnapshot() {
+        MessageValidationSnapshot snapshot = MessageValidationSnapshot.create(
+                dummyChatMessage(),
+                "req-unsupported-validation",
+                1,
+                "USER_CORRECTION",
+                "VALID",
+                "ETCH",
+                "UNSUPPORTED",
                 null,
                 null,
                 null,

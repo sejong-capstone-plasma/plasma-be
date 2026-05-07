@@ -335,6 +335,61 @@ class ChatMessageControllerTest {
     }
 
     @Test
+    void 재검증결과_taskType이_UNSUPPORTED여도_confirm의_PREDICTION을_실행한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(invalidAiResponse());
+        when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(unsupportedButAllParamsValidResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-unsupported-after-correction",
+                                  "inputText": "압력은 모르겠고 소스 파워 800W, 바이어스 파워 100W로 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+
+        String validationBody = mockMvc.perform(post("/api/chat/messages/{messageId}/validations", messageId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "parameters": [
+                                    { "key": "pressure", "value": 50.0, "unit": "mTorr" },
+                                    { "key": "source_power", "value": 800.0, "unit": "W" },
+                                    { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskType").isEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long validationId = JsonTestHelper.readLong(validationBody, "validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "PREDICTION"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validation.taskType").isEmpty())
+                .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89));
+    }
+
+    @Test
     void confirm후_OPTIMIZATION_결과를_함께_반환한다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(optimizationAiResponse());
@@ -796,6 +851,20 @@ class ChatMessageControllerTest {
     private ExtractedParameterData noTaskTypeAiResponse() {
         return new ExtractedParameterData(
                 "req-no-task-001", "VALID", "ETCH", null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                null,
+                null,
+                null
+        );
+    }
+
+    private ExtractedParameterData unsupportedButAllParamsValidResponse() {
+        return new ExtractedParameterData(
+                "req-unsupported", "UNSUPPORTED", null, null,
                 new ExtractedParameterData.ProcessParams(
                         new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
                         new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
