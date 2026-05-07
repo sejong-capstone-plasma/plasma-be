@@ -61,6 +61,17 @@ class ExtractClientTest {
     }
 
     @Test
+    void buildValidateBody_taskType이_null이면_필드를_생략한다() {
+        Map<String, Double> values = Map.of("pressure", 30.0, "source_power", 500.0, "bias_power", 100.0);
+        Map<String, String> units  = Map.of("pressure", "mTorr", "source_power", "W", "bias_power", "W");
+
+        Map<String, Object> body = extractClient.buildValidateBody("ETCH", null, values, units);
+
+        assertThat(body).containsEntry("process_type", "ETCH");
+        assertThat(body).doesNotContainKey("task_type");
+    }
+
+    @Test
     void handleClientError_상태코드를_503으로_기록한다() {
         boolean handled = extractClient.handleClientError("connection refused");
 

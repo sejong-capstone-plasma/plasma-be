@@ -73,7 +73,9 @@ public class ExtractClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("request_id", UUID.randomUUID().toString());
         body.put("process_type", processType);
-        body.put("task_type", taskType);
+        if (taskType != null) {
+            body.put("task_type", taskType);
+        }
         body.put("process_params", processParamsMap);
         body.put("current_outputs", null);
         return body;

@@ -29,7 +29,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -102,9 +101,10 @@ class ExtractServiceTest {
     }
 
     @Test
-    void validateCorrection_AI가_UNSUPPORTED를_주더라도_수정값이_모두_VALID면_성공으로_본다() {
+    void validateCorrection_AI가_UNSUPPORTED를_주더라도_기존_taskType을_유지한다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
-        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong()))
+                .thenReturn(Optional.of(validSnapshot()));
         when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(unsupportedButAllParamsValidResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -118,16 +118,16 @@ class ExtractServiceTest {
 
         assertThat(response.sourceType()).isEqualTo("USER_CORRECTION");
         assertThat(response.validationStatus()).isEqualTo("VALID");
-        assertThat(response.taskType()).isNull();
+        assertThat(response.taskType()).isEqualTo("PREDICTION");
         assertThat(response.allValid()).isTrue();
         assertThat(response.parameters()).allMatch(parameter -> "VALID".equals(parameter.status()));
     }
 
     @Test
-    void validateCorrection_기존_taskType이_UNSUPPORTED면_AI_재검증에는_null로_보낸다() {
+    void validateCorrection_기존_taskType이_있으면_AI_재검증에도_그값을_보낸다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
         when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong()))
-                .thenReturn(Optional.of(unsupportedSnapshot()));
+                .thenReturn(Optional.of(validSnapshot()));
         when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -139,7 +139,7 @@ class ExtractServiceTest {
 
         extractService.validateCorrection(1L, request);
 
-        verify(extractClient).requestValidation(any(), isNull(), any(), any());
+        verify(extractClient).requestValidation(any(), argThat("PREDICTION"::equals), any(), any());
     }
 
     @Test
@@ -328,27 +328,6 @@ class ExtractServiceTest {
                 "VALID",
                 "ETCH",
                 "PREDICTION",
-                null,
-                null,
-                null,
-                null,
-                LocalDateTime.now()
-        );
-        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 50.0, "mTorr", "VALID", 0));
-        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "VALID", 1));
-        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "VALID", 2));
-        return snapshot;
-    }
-
-    private MessageValidationSnapshot unsupportedSnapshot() {
-        MessageValidationSnapshot snapshot = MessageValidationSnapshot.create(
-                dummyChatMessage(),
-                "req-unsupported-validation",
-                1,
-                "USER_CORRECTION",
-                "VALID",
-                "ETCH",
-                "UNSUPPORTED",
                 null,
                 null,
                 null,

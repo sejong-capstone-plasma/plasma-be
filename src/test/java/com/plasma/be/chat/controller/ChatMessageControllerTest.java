@@ -335,7 +335,7 @@ class ChatMessageControllerTest {
     }
 
     @Test
-    void 재검증결과_taskType이_UNSUPPORTED여도_confirm의_PREDICTION을_실행한다() throws Exception {
+    void 재검증결과_taskType이_UNSUPPORTED여도_기존_PREDICTION을_유지하고_confirm에서_예측을_실행한다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(invalidAiResponse());
         when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(unsupportedButAllParamsValidResponse());
@@ -369,7 +369,7 @@ class ChatMessageControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.taskType").isEmpty())
+                .andExpect(jsonPath("$.taskType").value("PREDICTION"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -377,15 +377,9 @@ class ChatMessageControllerTest {
         long validationId = JsonTestHelper.readLong(validationBody, "validationId");
 
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
-                        .session(browserSession)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "requestedTaskType": "PREDICTION"
-                                }
-                                """))
+                        .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.validation.taskType").isEmpty())
+                .andExpect(jsonPath("$.validation.taskType").value("PREDICTION"))
                 .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89));
     }
 

@@ -86,7 +86,8 @@ public class ExtractService {
                     attemptNo,
                     SOURCE_AI_EXTRACT,
                     data,
-                    Map.of()
+                    Map.of(),
+                    null
             );
             snapshotRepository.save(snapshot);
             return toResponse(snapshot);
@@ -113,9 +114,7 @@ public class ExtractService {
                 snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(messageId);
         int attemptNo = latestSnapshot.map(s -> s.getAttemptNo() + 1).orElse(1);
         String processType = latestSnapshot.map(MessageValidationSnapshot::getProcessType).orElse(null);
-        String taskType = latestSnapshot.map(MessageValidationSnapshot::getTaskType)
-                .map(this::normalizeTaskTypeForValidationRequest)
-                .orElse(null);
+        String taskType = latestSnapshot.map(MessageValidationSnapshot::getTaskType).orElse(null);
 
         Map<String, Double> paramValues = submittedParams.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().value()));
@@ -143,7 +142,8 @@ public class ExtractService {
                     attemptNo,
                     SOURCE_USER_CORRECTION,
                     data,
-                    submittedParams
+                    submittedParams,
+                    taskType
             );
             snapshotRepository.save(snapshot);
             return toResponse(snapshot);
@@ -271,7 +271,8 @@ public class ExtractService {
                                              int attemptNo,
                                              String sourceType,
                                              ExtractedParameterData data,
-                                             Map<String, SubmittedParam> submittedParams) {
+                                             Map<String, SubmittedParam> submittedParams,
+                                             String previousTaskType) {
         String validationStatus = sanitize(data.validationStatus(), "UNKNOWN");
         String requestId = sanitize(data.requestId(), UUID.randomUUID().toString());
 
@@ -310,6 +311,7 @@ public class ExtractService {
         String effectiveTaskType = resolveTaskType(
                 sourceType,
                 sanitize(data.taskType(), null),
+                sanitize(previousTaskType, null),
                 allParameterStatusesValid
         );
 
@@ -604,21 +606,17 @@ public class ExtractService {
 
     private String resolveTaskType(String sourceType,
                                    String taskType,
+                                   String previousTaskType,
                                    boolean allParameterStatusesValid) {
+        if (SOURCE_USER_CORRECTION.equals(sourceType) && StringUtils.hasText(previousTaskType)) {
+            return previousTaskType;
+        }
         if (SOURCE_USER_CORRECTION.equals(sourceType)
                 && allParameterStatusesValid
                 && "UNSUPPORTED".equals(taskType)) {
             return null;
         }
         return taskType;
-    }
-
-    private String normalizeTaskTypeForValidationRequest(String taskType) {
-        String normalizedTaskType = sanitize(taskType, null);
-        if ("UNSUPPORTED".equals(normalizedTaskType)) {
-            return null;
-        }
-        return normalizedTaskType;
     }
 
     private String sanitize(String value, String defaultValue) {
