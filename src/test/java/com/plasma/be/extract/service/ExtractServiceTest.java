@@ -98,6 +98,12 @@ class ExtractServiceTest {
         assertThat(response.sourceType()).isEqualTo("USER_CORRECTION");
         assertThat(response.allValid()).isTrue();
         assertThat(response.parameters()).allMatch(parameter -> "VALID".equals(parameter.status()));
+        verify(extractClient).requestValidation(
+                argThat("UNKNOWN"::equals),
+                argThat("UNSUPPORTED"::equals),
+                any(),
+                any()
+        );
     }
 
     @Test

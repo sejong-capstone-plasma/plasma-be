@@ -45,6 +45,8 @@ public class ExtractService {
     private static final String SOURCE_AI_EXTRACT = "AI_EXTRACT";
     private static final String SOURCE_USER_CORRECTION = "USER_CORRECTION";
     private static final String VALIDATION_AI_ERROR = "AI_ERROR";
+    private static final String DEFAULT_PROCESS_TYPE = "UNKNOWN";
+    private static final String DEFAULT_TASK_TYPE = "UNSUPPORTED";
     private static final List<String> EMPTY_TEXT_MARKERS = List.of("无", "none", "null", "n/a", "na");
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
@@ -114,6 +116,8 @@ public class ExtractService {
         int attemptNo = snapshots.isEmpty() ? 1 : snapshots.get(snapshots.size() - 1).getAttemptNo() + 1;
         String processType = findLatestNonEmptyValue(snapshots, MessageValidationSnapshot::getProcessType);
         String taskType = findLatestNonEmptyValue(snapshots, MessageValidationSnapshot::getTaskType);
+        String requestProcessType = processType != null ? processType : DEFAULT_PROCESS_TYPE;
+        String requestTaskType = taskType != null ? taskType : DEFAULT_TASK_TYPE;
 
         Map<String, Double> paramValues = submittedParams.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().value()));
@@ -123,7 +127,7 @@ public class ExtractService {
 
         try {
             ExtractedParameterData data = extractClient.requestValidation(
-                    processType, taskType, paramValues, paramUnits);
+                    requestProcessType, requestTaskType, paramValues, paramUnits);
             if (data == null) {
                 MessageValidationSnapshot failure = createFailureSnapshot(
                         message,
