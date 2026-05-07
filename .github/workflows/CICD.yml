@@ -39,11 +39,16 @@ jobs:
 
       - name: Build Docker image
         if: github.event_name == 'push'
-        run: docker build --platform linux/amd64 -t ${{ secrets.DOCKERHUB_USERNAME }}/live_server:latest .
+        run: |
+          docker build --platform linux/amd64 \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/live_server:latest \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/live_server:${{ github.sha }} .
 
       - name: Push Docker image
         if: github.event_name == 'push'
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/live_server:latest
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/live_server:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/live_server:${{ github.sha }}
 
   deploy:
     if: github.event_name == 'push'
@@ -88,9 +93,10 @@ jobs:
             ${{ secrets.APPLICATION_SECRET }}
             EOF
 
-            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/live_server:latest
+            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/live_server:${{ github.sha }}
+            sudo docker tag ${{ secrets.DOCKERHUB_USERNAME }}/live_server:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/live_server:latest
             cd /home/ubuntu
-            sudo docker compose -f docker-compose-${{ env.TARGET_UPSTREAM }}.yml up -d
+            sudo docker compose -f docker-compose-${{ env.TARGET_UPSTREAM }}.yml up -d --force-recreate
 
       - name: Check deployed server health
         uses: jtalk/url-health-check-action@v3
