@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -18,6 +20,8 @@ import java.util.UUID;
 
 @Component
 public class ExtractClient {
+
+    private static final Logger log = LoggerFactory.getLogger(ExtractClient.class);
 
     private final String baseUrl;
     private final String extractEndpoint;
@@ -100,6 +104,7 @@ public class ExtractClient {
 
     private ExtractedParameterData sendValidateRequest(Map<String, Object> body) {
         try {
+            log.info("Extract validate upstream request body: {}", body);
             String responseBody = httpClient.post()
                     .uri(validateEndpoint)
                     .contentType(MediaType.APPLICATION_JSON)
