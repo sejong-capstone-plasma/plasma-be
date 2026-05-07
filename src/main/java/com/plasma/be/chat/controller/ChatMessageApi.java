@@ -7,7 +7,7 @@ import com.plasma.be.chat.dto.ChatSessionSummaryResponse;
 import com.plasma.be.chat.dto.ChatSessionsEndRequest;
 import com.plasma.be.extract.dto.ParameterValidationRequest;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
-import com.plasma.be.predict.dto.ConfirmResponse;
+import com.plasma.be.chat.dto.ConfirmResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;

@@ -10,7 +10,7 @@ import com.plasma.be.chat.service.ChatMessageService;
 import com.plasma.be.chat.service.ChatWorkflowService;
 import com.plasma.be.extract.dto.ParameterValidationRequest;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
-import com.plasma.be.predict.dto.ConfirmResponse;
+import com.plasma.be.chat.dto.ConfirmResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;

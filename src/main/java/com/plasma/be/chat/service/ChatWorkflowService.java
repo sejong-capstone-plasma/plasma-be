@@ -14,7 +14,7 @@ import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
 import com.plasma.be.optimize.dto.OptimizeRequest;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
-import com.plasma.be.predict.dto.ConfirmResponse;
+import com.plasma.be.chat.dto.ConfirmResponse;
 import com.plasma.be.question.client.dto.QuestionAnswerResponse;
 import com.plasma.be.question.service.QuestionService;
 import org.springframework.stereotype.Service;
