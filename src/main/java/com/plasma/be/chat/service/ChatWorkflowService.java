@@ -155,7 +155,7 @@ public class ChatWorkflowService {
                 ? inferredTaskType.trim().toUpperCase()
                 : null;
 
-        if ("UNSUPPORTED".equals(normalizedInferred) && normalizedRequested != null) {
+        if (normalizedRequested != null) {
             return normalizedRequested;
         }
         if (StringUtils.hasText(normalizedInferred)) {

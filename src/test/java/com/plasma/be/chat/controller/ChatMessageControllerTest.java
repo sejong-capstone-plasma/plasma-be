@@ -312,6 +312,89 @@ class ChatMessageControllerTest {
     }
 
     @Test
+    void taskType이_PREDICTION이어도_confirm의_requestedTaskType_OPTIMIZATION을_우선한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-prediction-override-opt",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "OPTIMIZATION"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validation.taskType").value("PREDICTION"))
+                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(50.0))
+                .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
+                .andExpect(jsonPath("$.prediction").isEmpty());
+    }
+
+    @Test
+    void prediction후_같은_validation에_optimization을_다시_요청할_수_있다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-prediction-then-optimization",
+                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "PREDICTION"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.optimization").isEmpty());
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "OPTIMIZATION"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(50.0))
+                .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
+                .andExpect(jsonPath("$.prediction").isEmpty());
+    }
+
+    @Test
     void taskType이_비어있고_confirm요청에도_선택이_없으면_400이다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(noTaskTypeAiResponse());
@@ -577,9 +660,10 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.comparison.left.label").value("latest_confirmed"))
+                .andExpect(jsonPath("$.comparison.left.label").value("condition_a"))
                 .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(50.0))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(800.0))
+                .andExpect(jsonPath("$.comparison.right.label").value("condition_b"))
                 .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(11.0))
                 .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(713.0));
     }
@@ -611,7 +695,7 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk());
 
-        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonFallbackAiResponse());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(patchedHistoryComparisonAiResponse());
 
         String compareBody = mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
@@ -633,8 +717,9 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comparison.left.label").value("condition_a"))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(800.0))
-                .andExpect(jsonPath("$.comparison.right.label").value("patched_latest"))
+                .andExpect(jsonPath("$.comparison.right.label").value("condition_b"))
                 .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(900.0))
                 .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0));
     }
@@ -876,11 +961,33 @@ class ChatMessageControllerTest {
                 "req-cmp-002", "VALID", "ETCH", "COMPARISON",
                 null,
                 null,
-                null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
                 new ExtractedParameterData.ProcessParams(
                         new ExtractedParameterData.ValidatedParam(11.0, "mTorr", "VALID"),
                         new ExtractedParameterData.ValidatedParam(501.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(201.0, "W", "VALID")
+                )
+        );
+    }
+
+    private ExtractedParameterData patchedHistoryComparisonAiResponse() {
+        return new ExtractedParameterData(
+                "req-cmp-patch", "VALID", "ETCH", "COMPARISON",
+                null,
+                null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(900.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 )
         );
     }
