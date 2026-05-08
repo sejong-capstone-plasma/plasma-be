@@ -303,7 +303,11 @@ class ChatMessageControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.optimization.summary").value("optimized"))
+                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(50.0))
+                .andExpect(jsonPath("$.optimization.current.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
+                .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
+                .andExpect(jsonPath("$.optimization.candidates[0].prediction_result.etch_score.value").value(9.1))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
 
@@ -453,7 +457,8 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
-                .andExpect(jsonPath("$.optimization.summary").value("optimized"))
+                .andExpect(jsonPath("$.optimization.current.process_params.source_power.value").value(800.0))
+                .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
 
@@ -482,7 +487,9 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.optimization.summary").value("optimized"))
+                .andExpect(jsonPath("$.optimization.current.process_params.bias_power.value").value(100.0))
+                .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
+                .andExpect(jsonPath("$.optimization.candidates[2].candidate_id").value(1))
                 .andExpect(jsonPath("$.prediction").isEmpty())
                 .andExpect(jsonPath("$.comparison").isEmpty());
     }
@@ -890,13 +897,56 @@ class ChatMessageControllerTest {
 
     private OptimizePipelineResponse validOptimizationResponse() {
         return new OptimizePipelineResponse(java.util.Map.of(
-                "summary", "optimized",
-                "recommendation", java.util.Map.of(
-                        "pressure", 45.0,
-                        "source_power", 820.0,
-                        "bias_power", 95.0
+                "current", java.util.Map.of(
+                        "process_params", java.util.Map.of(
+                                "pressure", valueWithUnit(50.0, "mTorr"),
+                                "source_power", valueWithUnit(800.0, "W"),
+                                "bias_power", valueWithUnit(100.0, "W")
+                        ),
+                        "prediction_result", predictionResultMap(1.23, 4.56, 7.89)
+                ),
+                "candidates", java.util.List.of(
+                        optimizationCandidate(1L, 45.0, 820.0, 95.0, 1.4, 4.9, 7.5),
+                        optimizationCandidate(2L, 42.0, 840.0, 90.0, 1.8, 5.2, 9.1),
+                        optimizationCandidate(3L, 48.0, 810.0, 92.0, 1.6, 5.0, 8.3),
+                        optimizationCandidate(4L, 55.0, 780.0, 110.0, 1.1, 4.2, 6.2)
                 )
         ));
+    }
+
+    private java.util.Map<String, Object> optimizationCandidate(Long candidateId,
+                                                                Double pressure,
+                                                                Double sourcePower,
+                                                                Double biasPower,
+                                                                Double ionFlux,
+                                                                Double ionEnergy,
+                                                                Double etchScore) {
+        return java.util.Map.of(
+                "candidate_id", candidateId,
+                "process_params", java.util.Map.of(
+                        "pressure", valueWithUnit(pressure, "mTorr"),
+                        "source_power", valueWithUnit(sourcePower, "W"),
+                        "bias_power", valueWithUnit(biasPower, "W")
+                ),
+                "prediction_result", predictionResultMap(ionFlux, ionEnergy, etchScore)
+        );
+    }
+
+    private java.util.Map<String, Object> predictionResultMap(Double ionFlux,
+                                                              Double ionEnergy,
+                                                              Double etchScore) {
+        return java.util.Map.of(
+                "ion_flux", valueWithUnit(ionFlux, "a.u."),
+                "ion_energy", valueWithUnit(ionEnergy, "eV"),
+                "etch_score", valueWithUnit(etchScore, "score")
+        );
+    }
+
+    private java.util.Map<String, Object> valueWithUnit(Double value, String unit) {
+        return java.util.Map.of(
+                "value", value,
+                "unit", unit
+        );
     }
 
     private ComparisonResponse validComparisonResponse() {

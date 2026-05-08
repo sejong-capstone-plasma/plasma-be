@@ -1,5 +1,7 @@
 package com.plasma.be.chat.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.plasma.be.chat.dto.ConfirmOptimizationResponse;
 import com.plasma.be.chat.dto.ChatMessageCreateRequest;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
 import com.plasma.be.chat.entity.ChatMessage;
@@ -25,11 +27,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Comparator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 public class ChatWorkflowService {
+
+    private static final int MAX_OPTIMIZATION_CANDIDATES = 3;
 
     private final ChatMessageService chatMessageService;
     private final ExtractService extractService;
@@ -37,6 +42,7 @@ public class ChatWorkflowService {
     private final OptimizeClient optimizeClient;
     private final ComparisonService comparisonService;
     private final QuestionService questionService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ChatWorkflowService(ChatMessageService chatMessageService,
                                ExtractService extractService,
@@ -105,7 +111,9 @@ public class ChatWorkflowService {
         }
         if ("OPTIMIZATION".equals(taskType)) {
             try {
-                OptimizePipelineResponse optimization = runOptimizePipeline(message, validation);
+                ConfirmOptimizationResponse optimization = toConfirmOptimizationResponse(
+                        runOptimizePipeline(message, validation)
+                );
                 return new ConfirmResponse(validation, null, optimization, null, null, null, null);
             } catch (RestClientException e) {
                 return new ConfirmResponse(validation, null, null, null, null, null, e.getMessage());
@@ -215,5 +223,40 @@ public class ChatWorkflowService {
                 processParams,
                 currentOutputs
         ));
+    }
+
+    private ConfirmOptimizationResponse toConfirmOptimizationResponse(OptimizePipelineResponse optimization) {
+        if (optimization == null || optimization.payload() == null) {
+            return null;
+        }
+
+        try {
+            ConfirmOptimizationResponse mapped = objectMapper.convertValue(
+                    optimization.payload(),
+                    ConfirmOptimizationResponse.class
+            );
+            if (mapped == null || mapped.candidates() == null) {
+                return mapped;
+            }
+
+            List<ConfirmOptimizationResponse.Candidate> candidates = mapped.candidates().stream()
+                    .sorted(Comparator.comparingDouble(this::candidateEtchScore).reversed())
+                    .limit(MAX_OPTIMIZATION_CANDIDATES)
+                    .toList();
+
+            return new ConfirmOptimizationResponse(mapped.current(), candidates);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("Unexpected optimization response shape.", exception);
+        }
+    }
+
+    private double candidateEtchScore(ConfirmOptimizationResponse.Candidate candidate) {
+        if (candidate == null
+                || candidate.predictionResult() == null
+                || candidate.predictionResult().etchScore() == null
+                || candidate.predictionResult().etchScore().value() == null) {
+            return Double.NEGATIVE_INFINITY;
+        }
+        return candidate.predictionResult().etchScore().value();
     }
 }
