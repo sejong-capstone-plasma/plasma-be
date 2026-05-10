@@ -1147,57 +1147,38 @@ class ChatMessageControllerTest {
     }
 
     private OptimizePipelineResponse validOptimizationResponse() {
-        return new OptimizePipelineResponse(java.util.Map.of(
-                "current", java.util.Map.of(
-                        "process_params", java.util.Map.of(
-                                "pressure", valueWithUnit(10.0, "mTorr"),
-                                "source_power", valueWithUnit(500.0, "W"),
-                                "bias_power", valueWithUnit(100.0, "W")
-                        ),
-                        "prediction_result", predictionResultMap(1.23, 4.56, 7.89)
-                ),
-                "candidates", java.util.List.of(
-                        optimizationCandidate(1L, 45.0, 820.0, 95.0, 1.4, 4.9, 7.5),
-                        optimizationCandidate(2L, 42.0, 840.0, 90.0, 1.8, 5.2, 9.1),
-                        optimizationCandidate(3L, 48.0, 810.0, 92.0, 1.6, 5.0, 8.3),
-                        optimizationCandidate(4L, 55.0, 780.0, 110.0, 1.1, 4.2, 6.2)
-                )
-        ));
+        var baselineOutputs = new OptimizePipelineResponse.BaselineOutputs(
+                new OptimizePipelineResponse.ValueWithUnit(7.89, "score")
+        );
+        var candidates = java.util.List.of(
+                optimizationCandidate(1, 45.0, 820.0, 95.0, 1.4, 4.9, 7.5),
+                optimizationCandidate(2, 42.0, 840.0, 90.0, 1.8, 5.2, 9.1),
+                optimizationCandidate(3, 48.0, 810.0, 92.0, 1.6, 5.0, 8.3),
+                optimizationCandidate(4, 55.0, 780.0, 110.0, 1.1, 4.2, 6.2)
+        );
+        var optimizationResult = new OptimizePipelineResponse.OptimizationResult(4, candidates);
+        var explanation = new OptimizePipelineResponse.Explanation("최적화 완료", java.util.List.of());
+        return new OptimizePipelineResponse("req-opt-001", "ETCH", baselineOutputs, optimizationResult, explanation);
     }
 
-    private java.util.Map<String, Object> optimizationCandidate(Long candidateId,
-                                                                Double pressure,
-                                                                Double sourcePower,
-                                                                Double biasPower,
-                                                                Double ionFlux,
-                                                                Double ionEnergy,
-                                                                Double etchScore) {
-        return java.util.Map.of(
-                "candidate_id", candidateId,
-                "process_params", java.util.Map.of(
-                        "pressure", valueWithUnit(pressure, "mTorr"),
-                        "source_power", valueWithUnit(sourcePower, "W"),
-                        "bias_power", valueWithUnit(biasPower, "W")
-                ),
-                "prediction_result", predictionResultMap(ionFlux, ionEnergy, etchScore)
+    private OptimizePipelineResponse.OptimizationCandidate optimizationCandidate(int rank,
+                                                                                  Double pressure,
+                                                                                  Double sourcePower,
+                                                                                  Double biasPower,
+                                                                                  Double ionFlux,
+                                                                                  Double ionEnergy,
+                                                                                  Double etchScore) {
+        var processParams = new OptimizePipelineResponse.ProcessParams(
+                new OptimizePipelineResponse.ValueWithUnit(pressure, "mTorr"),
+                new OptimizePipelineResponse.ValueWithUnit(sourcePower, "W"),
+                new OptimizePipelineResponse.ValueWithUnit(biasPower, "W")
         );
-    }
-
-    private java.util.Map<String, Object> predictionResultMap(Double ionFlux,
-                                                              Double ionEnergy,
-                                                              Double etchScore) {
-        return java.util.Map.of(
-                "ion_flux", valueWithUnit(ionFlux, "a.u."),
-                "ion_energy", valueWithUnit(ionEnergy, "eV"),
-                "etch_score", valueWithUnit(etchScore, "score")
+        var predictionResult = new PredictPipelineResponse.PredictionResult(
+                new PredictPipelineResponse.ValueWithUnit(ionFlux, "a.u."),
+                new PredictPipelineResponse.ValueWithUnit(ionEnergy, "eV"),
+                new PredictPipelineResponse.ValueWithUnit(etchScore, "score")
         );
-    }
-
-    private java.util.Map<String, Object> valueWithUnit(Double value, String unit) {
-        return java.util.Map.of(
-                "value", value,
-                "unit", unit
-        );
+        return new OptimizePipelineResponse.OptimizationCandidate(rank, processParams, predictionResult, null, etchScore);
     }
 
     private ComparisonResponse validComparisonResponse() {
