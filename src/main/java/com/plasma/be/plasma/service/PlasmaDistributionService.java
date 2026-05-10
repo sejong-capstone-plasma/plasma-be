@@ -47,7 +47,7 @@ public class PlasmaDistributionService {
     private List<Double> parseJsonArray(String json) {
         if (json == null || json.isBlank()) return List.of();
         try {
-            return objectMapper.readValue(json, new TypeReference<>() {});
+            return objectMapper.readValue(json, new TypeReference<List<Double>>() {});
         } catch (Exception e) {
             return List.of();
         }
