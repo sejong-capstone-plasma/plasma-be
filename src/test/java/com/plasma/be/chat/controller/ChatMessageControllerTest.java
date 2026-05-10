@@ -89,14 +89,14 @@ class ChatMessageControllerTest {
                                 {
                                   "sessionId": "session-001",
                                   "role": "USER",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 식각률 예측해줘"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W 식각률 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messageId").exists())
                 .andExpect(jsonPath("$.validations[0].validationStatus").value("VALID"))
                 .andExpect(jsonPath("$.validations[0].parameters[0].key").value("pressure"))
-                .andExpect(jsonPath("$.validations[0].parameters[0].value").value(50.0));
+                .andExpect(jsonPath("$.validations[0].parameters[0].value").value(10.0));
     }
 
     @Test
@@ -109,7 +109,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-001",
-                                  "inputText": "압력은 모르겠고 소스 파워 800W, 바이어스 파워 100W로 예측해줘"
+                                  "inputText": "압력은 모르겠고 소스 파워 500W, 바이어스 파워 100W로 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -130,7 +130,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-001",
-                                  "inputText": "압력은 모르겠고 소스 파워 800W, 바이어스 파워 100W로 예측해줘"
+                                  "inputText": "압력은 모르겠고 소스 파워 500W, 바이어스 파워 100W로 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -146,8 +146,8 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "parameters": [
-                                    { "key": "pressure", "value": 50.0, "unit": "mTorr" },
-                                    { "key": "source_power", "value": 800.0, "unit": "W" },
+                                    { "key": "pressure", "value": 10.0, "unit": "mTorr" },
+                                    { "key": "source_power", "value": 500.0, "unit": "W" },
                                     { "key": "bias_power", "value": 100.0, "unit": "W" }
                                   ]
                                 }
@@ -169,7 +169,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-001",
-                                  "inputText": "압력은 몰라. 소스 파워 800W, 바이어스 파워 100W로 예측해줘"
+                                  "inputText": "압력은 몰라. 소스 파워 500W, 바이어스 파워 100W로 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -186,8 +186,8 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "parameters": [
-                                    { "key": "pressure", "value": 50.0, "unit": "mTorr" },
-                                    { "key": "source_power", "value": 800.0, "unit": "W" },
+                                    { "key": "pressure", "value": 10.0, "unit": "mTorr" },
+                                    { "key": "source_power", "value": 500.0, "unit": "W" },
                                     { "key": "bias_power", "value": 100.0, "unit": "W" }
                                   ]
                                 }
@@ -214,7 +214,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-001",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 식각률 예측해줘"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W 식각률 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -248,7 +248,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-no-task-predict",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -283,7 +283,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-no-task-opt",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -303,7 +303,7 @@ class ChatMessageControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(50.0))
+                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(10.0))
                 .andExpect(jsonPath("$.optimization.current.prediction_result.etch_score.value").value(7.89))
                 .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
@@ -321,7 +321,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-prediction-override-opt",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 예측해줘"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -342,7 +342,7 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validation.taskType").value("PREDICTION"))
-                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(50.0))
+                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(10.0))
                 .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
@@ -357,7 +357,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-prediction-then-optimization",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 예측해줘"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -389,7 +389,7 @@ class ChatMessageControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(50.0))
+                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(10.0))
                 .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
@@ -405,7 +405,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-no-task-missing",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -434,7 +434,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-unsupported-after-correction",
-                                  "inputText": "압력은 모르겠고 소스 파워 800W, 바이어스 파워 100W로 예측해줘"
+                                  "inputText": "압력은 모르겠고 소스 파워 500W, 바이어스 파워 100W로 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -450,8 +450,8 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "parameters": [
-                                    { "key": "pressure", "value": 50.0, "unit": "mTorr" },
-                                    { "key": "source_power", "value": 800.0, "unit": "W" },
+                                    { "key": "pressure", "value": 10.0, "unit": "mTorr" },
+                                    { "key": "source_power", "value": 500.0, "unit": "W" },
                                     { "key": "bias_power", "value": 100.0, "unit": "W" }
                                   ]
                                 }
@@ -540,7 +540,7 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
-                .andExpect(jsonPath("$.optimization.current.process_params.source_power.value").value(800.0))
+                .andExpect(jsonPath("$.optimization.current.process_params.source_power.value").value(500.0))
                 .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
@@ -556,7 +556,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-optimization",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 조건에서 최적화해줘"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W 조건에서 최적화해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -594,6 +594,11 @@ class ChatMessageControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].validationStatus").value("VALID"))
+                .andExpect(jsonPath("$.validations[0].allValid").value(true))
+                .andExpect(jsonPath("$.validations[0].parameters.length()").value(0))
+                .andExpect(jsonPath("$.validations[0].conditionA.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.validations[0].conditionB.parameters[0].value").value(6.0))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -604,11 +609,100 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(11.0))
-                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(501.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
                 .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(6.0))
-                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(401.0))
-                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(608.0));
+                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(400.0))
+                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(606.0));
+    }
+
+    @Test
+    void COMPARISON_히스토리가_없어_조건이_불완전하면_confirm을_막고_재입력으로_완성할_수_있다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+                .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-missing",
+                                  "inputText": "압력 8이랑 10일 때 비교해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].validationStatus").value("INVALID_FIELD"))
+                .andExpect(jsonPath("$.validations[0].allValid").value(false))
+                .andExpect(jsonPath("$.validations[0].parameters.length()").value(2))
+                .andExpect(jsonPath("$.validations[0].parameters[0].key").value("source_power"))
+                .andExpect(jsonPath("$.validations[0].parameters[1].key").value("bias_power"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isBadRequest());
+
+        String correctedBody = mockMvc.perform(post("/api/chat/messages/{messageId}/validations", messageId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "parameters": [
+                                    { "key": "source_power", "value": 500.0, "unit": "W" },
+                                    { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskType").value("COMPARISON"))
+                .andExpect(jsonPath("$.validationStatus").value("VALID"))
+                .andExpect(jsonPath("$.allValid").value(true))
+                .andExpect(jsonPath("$.conditionA.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.conditionB.parameters[2].value").value(100.0))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long correctedValidationId = JsonTestHelper.readLong(correctedBody, "validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, correctedValidationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(8.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(100.0));
+    }
+
+    @Test
+    void COMPARISON_범위초과값은_OUT_OF_RANGE로_반환한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(outOfRangeComparisonAiResponse());
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-out-range",
+                                  "inputText": "압력 10, 소스 200, 바이어스 150이랑 압력 4, 소스 600, 바이어스 200 비교해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].validationStatus").value("INVALID_FIELD"))
+                .andExpect(jsonPath("$.validations[0].allValid").value(false))
+                .andExpect(jsonPath("$.validations[0].parameters.length()").value(1))
+                .andExpect(jsonPath("$.validations[0].parameters[0].key").value("source_power"))
+                .andExpect(jsonPath("$.validations[0].parameters[0].status").value("OUT_OF_RANGE"))
+                .andExpect(jsonPath("$.validations[0].parameters[0].value").value(600.0))
+                .andExpect(jsonPath("$.validations[0].conditionB.parameters[1].status").value("OUT_OF_RANGE"));
     }
 
     @Test
@@ -623,7 +717,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-compare-history",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 식각률 예측해줘"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W 식각률 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -661,16 +755,18 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.comparison.left.label").value("condition_a"))
-                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(50.0))
-                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(800.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
                 .andExpect(jsonPath("$.comparison.right.label").value("condition_b"))
-                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(11.0))
-                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(713.0));
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(710.0));
     }
 
     @Test
     void confirm후_COMPARISON_그조건의_변화량_비교를_할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any()))
+                .thenReturn(validAiResponseWithSource400(), patchedHistoryComparisonAiResponse());
         when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
@@ -680,7 +776,7 @@ class ChatMessageControllerTest {
                         .content("""
                                 {
                                   "sessionId": "session-compare-patch",
-                                  "inputText": "압력 50mTorr, 소스 파워 800W, 바이어스 파워 100W 식각률 예측해줘"
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W 식각률 예측해줘"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -694,8 +790,6 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", baseMessageId, baseValidationId)
                         .session(browserSession))
                 .andExpect(status().isOk());
-
-        when(extractClient.requestExtraction(anyString(), any())).thenReturn(patchedHistoryComparisonAiResponse());
 
         String compareBody = mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
@@ -718,9 +812,9 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.comparison.left.label").value("condition_a"))
-                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(800.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(400.0))
                 .andExpect(jsonPath("$.comparison.right.label").value("condition_b"))
-                .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(900.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
                 .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0));
     }
 
@@ -885,8 +979,22 @@ class ChatMessageControllerTest {
         return new ExtractedParameterData(
                 "req-001", "VALID", "ETCH", "PREDICTION",
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                null,
+                null,
+                null
+        );
+    }
+
+    private ExtractedParameterData validAiResponseWithSource400() {
+        return new ExtractedParameterData(
+                "req-001-alt", "VALID", "ETCH", "PREDICTION",
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(400.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null,
@@ -900,7 +1008,7 @@ class ChatMessageControllerTest {
                 "req-002", "INVALID_FIELD", "ETCH", "PREDICTION",
                 new ExtractedParameterData.ProcessParams(
                         new ExtractedParameterData.ValidatedParam(null, "mTorr", "MISSING"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null,
@@ -926,8 +1034,8 @@ class ChatMessageControllerTest {
         return new ExtractedParameterData(
                 "req-opt-001", "VALID", "ETCH", "OPTIMIZATION",
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 new ExtractedParameterData.CurrentOutputs(
@@ -944,14 +1052,50 @@ class ChatMessageControllerTest {
                 null,
                 null,
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(11.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(501.0, "W", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(201.0, "W", "VALID")
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(200.0, "W", "VALID")
                 ),
                 new ExtractedParameterData.ProcessParams(
                         new ExtractedParameterData.ValidatedParam(6.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(201.0, "W", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(401.0, "W", "VALID")
+                        new ExtractedParameterData.ValidatedParam(200.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(400.0, "W", "VALID")
+                )
+        );
+    }
+
+    private ExtractedParameterData incompleteComparisonAiResponse() {
+        return new ExtractedParameterData(
+                "req-cmp-incomplete", "INVALID_FIELD", "ETCH", "COMPARISON",
+                null,
+                null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(8.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(null, "W", "MISSING"),
+                        new ExtractedParameterData.ValidatedParam(null, "W", "MISSING")
+                ),
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(null, "W", "MISSING"),
+                        new ExtractedParameterData.ValidatedParam(null, "W", "MISSING")
+                )
+        );
+    }
+
+    private ExtractedParameterData outOfRangeComparisonAiResponse() {
+        return new ExtractedParameterData(
+                "req-cmp-out-range", "VALID", "ETCH", "COMPARISON",
+                null,
+                null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(200.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(110.0, "W", "VALID")
+                ),
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(4.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(600.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(200.0, "W", "VALID")
                 )
         );
     }
@@ -962,14 +1106,14 @@ class ChatMessageControllerTest {
                 null,
                 null,
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(11.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(501.0, "W", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(201.0, "W", "VALID")
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(200.0, "W", "VALID")
                 )
         );
     }
@@ -980,13 +1124,13 @@ class ChatMessageControllerTest {
                 null,
                 null,
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(400.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(900.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 )
         );
@@ -1006,8 +1150,8 @@ class ChatMessageControllerTest {
         return new OptimizePipelineResponse(java.util.Map.of(
                 "current", java.util.Map.of(
                         "process_params", java.util.Map.of(
-                                "pressure", valueWithUnit(50.0, "mTorr"),
-                                "source_power", valueWithUnit(800.0, "W"),
+                                "pressure", valueWithUnit(10.0, "mTorr"),
+                                "source_power", valueWithUnit(500.0, "W"),
                                 "bias_power", valueWithUnit(100.0, "W")
                         ),
                         "prediction_result", predictionResultMap(1.23, 4.56, 7.89)
@@ -1058,7 +1202,7 @@ class ChatMessageControllerTest {
 
     private ComparisonResponse validComparisonResponse() {
         return comparisonFromParams(
-                java.util.Map.of("pressure", 50.0, "source_power", 800.0, "bias_power", 100.0),
+                java.util.Map.of("pressure", 10.0, "source_power", 500.0, "bias_power", 100.0),
                 java.util.Map.of("pressure", 10.0, "source_power", 500.0, "bias_power", 200.0)
         );
     }
@@ -1077,8 +1221,8 @@ class ChatMessageControllerTest {
         return new ExtractedParameterData(
                 "req-no-task-001", "VALID", "ETCH", null,
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null,
@@ -1091,8 +1235,8 @@ class ChatMessageControllerTest {
         return new ExtractedParameterData(
                 "req-unsupported", "UNSUPPORTED", null, null,
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null,
@@ -1105,8 +1249,8 @@ class ChatMessageControllerTest {
         return new ExtractedParameterData(
                 "req-unsupported-ai", "UNSUPPORTED", "UNKNOWN", "UNSUPPORTED",
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null,

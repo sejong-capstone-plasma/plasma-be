@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -81,6 +82,45 @@ class ExtractServiceTest {
     }
 
     @Test
+    void extractFromMessage_COMPARISON이면_조건A와_조건B를_응답에_포함한다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(comparisonAiResponse());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ParameterValidationResponse response = extractService.extractFromMessage(1L);
+
+        assertThat(response.taskType()).isEqualTo("COMPARISON");
+        assertThat(response.validationStatus()).isEqualTo("VALID");
+        assertThat(response.allValid()).isTrue();
+        assertThat(response.parameters()).isEmpty();
+        assertThat(response.conditionA()).isNotNull();
+        assertThat(response.conditionA().parameters()).hasSize(3);
+        assertThat(response.conditionA().parameters().get(0).value()).isEqualTo(8.0);
+        assertThat(response.conditionB()).isNotNull();
+        assertThat(response.conditionB().parameters().get(0).value()).isEqualTo(10.0);
+    }
+
+    @Test
+    void extractFromMessage_COMPARISON_범위초과값은_OUT_OF_RANGE로_표시한다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(outOfRangeComparisonAiResponse());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ParameterValidationResponse response = extractService.extractFromMessage(1L);
+
+        assertThat(response.validationStatus()).isEqualTo("INVALID_FIELD");
+        assertThat(response.allValid()).isFalse();
+        assertThat(response.parameters()).hasSize(1);
+        assertThat(response.parameters().get(0).key()).isEqualTo("source_power");
+        assertThat(response.parameters().get(0).status()).isEqualTo("OUT_OF_RANGE");
+        assertThat(response.parameters().get(0).value()).isEqualTo(600.0);
+        assertThat(response.conditionB()).isNotNull();
+        assertThat(response.conditionB().parameters().get(1).status()).isEqualTo("OUT_OF_RANGE");
+    }
+
+    @Test
     void validateCorrection_사용자입력값을_기반으로_재검증한다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
         when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(anyLong())).thenReturn(List.of());
@@ -88,8 +128,8 @@ class ExtractServiceTest {
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ParameterValidationRequest request = new ParameterValidationRequest(List.of(
-                new ParameterInputRequest("pressure", 50.0, "mTorr"),
-                new ParameterInputRequest("source_power", 800.0, "W"),
+                new ParameterInputRequest("pressure", 10.0, "mTorr"),
+                new ParameterInputRequest("source_power", 500.0, "W"),
                 new ParameterInputRequest("bias_power", 100.0, "W")
         ));
 
@@ -107,6 +147,52 @@ class ExtractServiceTest {
     }
 
     @Test
+    void validateCorrection_COMPARISON이면_공통_파라미터를_두조건에_채운다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(anyLong()))
+                .thenReturn(List.of(incompleteComparisonSnapshot()));
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ParameterValidationRequest request = new ParameterValidationRequest(List.of(
+                new ParameterInputRequest("source_power", 500.0, "W"),
+                new ParameterInputRequest("bias_power", 100.0, "W")
+        ));
+
+        ParameterValidationResponse response = extractService.validateCorrection(1L, request);
+
+        assertThat(response.sourceType()).isEqualTo("USER_CORRECTION");
+        assertThat(response.taskType()).isEqualTo("COMPARISON");
+        assertThat(response.validationStatus()).isEqualTo("VALID");
+        assertThat(response.allValid()).isTrue();
+        assertThat(response.parameters()).isEmpty();
+        assertThat(response.conditionA()).isNotNull();
+        assertThat(response.conditionA().parameters().get(1).value()).isEqualTo(500.0);
+        assertThat(response.conditionB()).isNotNull();
+        assertThat(response.conditionB().parameters().get(2).value()).isEqualTo(100.0);
+        verify(extractClient, never()).requestValidation(any(), any(), any(), any());
+    }
+
+    @Test
+    void validateCorrection_범위초과값이면_OUT_OF_RANGE를_반환한다() {
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(anyLong())).thenReturn(List.of());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ParameterValidationRequest request = new ParameterValidationRequest(List.of(
+                new ParameterInputRequest("pressure", 10.0, "mTorr"),
+                new ParameterInputRequest("source_power", 600.0, "W"),
+                new ParameterInputRequest("bias_power", 100.0, "W")
+        ));
+
+        ParameterValidationResponse response = extractService.validateCorrection(1L, request);
+
+        assertThat(response.validationStatus()).isEqualTo("INVALID_FIELD");
+        assertThat(response.allValid()).isFalse();
+        assertThat(response.parameters().get(1).status()).isEqualTo("OUT_OF_RANGE");
+        verify(extractClient, never()).requestValidation(any(), any(), any(), any());
+    }
+
+    @Test
     void validateCorrection_AI가_UNSUPPORTED를_주더라도_기존_taskType을_유지한다() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
         when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(anyLong()))
@@ -115,8 +201,8 @@ class ExtractServiceTest {
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ParameterValidationRequest request = new ParameterValidationRequest(List.of(
-                new ParameterInputRequest("pressure", 50.0, "mTorr"),
-                new ParameterInputRequest("source_power", 800.0, "W"),
+                new ParameterInputRequest("pressure", 10.0, "mTorr"),
+                new ParameterInputRequest("source_power", 500.0, "W"),
                 new ParameterInputRequest("bias_power", 100.0, "W")
         ));
 
@@ -138,8 +224,8 @@ class ExtractServiceTest {
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ParameterValidationRequest request = new ParameterValidationRequest(List.of(
-                new ParameterInputRequest("pressure", 50.0, "mTorr"),
-                new ParameterInputRequest("source_power", 800.0, "W"),
+                new ParameterInputRequest("pressure", 10.0, "mTorr"),
+                new ParameterInputRequest("source_power", 500.0, "W"),
                 new ParameterInputRequest("bias_power", 100.0, "W")
         ));
 
@@ -157,8 +243,8 @@ class ExtractServiceTest {
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ParameterValidationRequest request = new ParameterValidationRequest(List.of(
-                new ParameterInputRequest("pressure", 50.0, "mTorr"),
-                new ParameterInputRequest("source_power", 800.0, "W"),
+                new ParameterInputRequest("pressure", 10.0, "mTorr"),
+                new ParameterInputRequest("source_power", 500.0, "W"),
                 new ParameterInputRequest("bias_power", 100.0, "W")
         ));
 
@@ -176,7 +262,7 @@ class ExtractServiceTest {
     void validateCorrection_파라미터가_빠지면_예외() {
         when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(dummyChatMessage()));
         ParameterValidationRequest request = new ParameterValidationRequest(List.of(
-                new ParameterInputRequest("pressure", 50.0, "mTorr")
+                new ParameterInputRequest("pressure", 10.0, "mTorr")
         ));
 
         assertThatThrownBy(() -> extractService.validateCorrection(1L, request))
@@ -288,15 +374,15 @@ class ExtractServiceTest {
 
     private ChatMessage dummyChatMessage() {
         Session session = Session.create("session-001", "browser-001", "테스트 세션", LocalDateTime.now());
-        return new ChatMessage(session, MessageRole.USER, "압력 50mTorr 식각률 예측해줘", LocalDateTime.now());
+        return new ChatMessage(session, MessageRole.USER, "압력 10mTorr 식각률 예측해줘", LocalDateTime.now());
     }
 
     private ExtractedParameterData validAiResponse() {
         return new ExtractedParameterData(
                 "req-001", "VALID", "ETCH", "PREDICTION",
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null,
@@ -310,7 +396,7 @@ class ExtractServiceTest {
                 "req-002", "INVALID_FIELD", "ETCH", "PREDICTION",
                 new ExtractedParameterData.ProcessParams(
                         new ExtractedParameterData.ValidatedParam(null, "mTorr", "MISSING"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null,
@@ -324,7 +410,7 @@ class ExtractServiceTest {
                 "无", "无", "无", "无",
                 new ExtractedParameterData.ProcessParams(
                         new ExtractedParameterData.ValidatedParam(null, "无", "无"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 new ExtractedParameterData.CurrentOutputs(
@@ -339,13 +425,49 @@ class ExtractServiceTest {
         return new ExtractedParameterData(
                 "req-unsupported", "UNSUPPORTED", null, null,
                 new ExtractedParameterData.ProcessParams(
-                        new ExtractedParameterData.ValidatedParam(50.0, "mTorr", "VALID"),
-                        new ExtractedParameterData.ValidatedParam(800.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
                         new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
                 ),
                 null,
                 null,
                 null
+        );
+    }
+
+    private ExtractedParameterData comparisonAiResponse() {
+        return new ExtractedParameterData(
+                "req-comparison", "INVALID_FIELD", "ETCH", "COMPARISON",
+                null,
+                null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(8.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                ),
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(500.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(100.0, "W", "VALID")
+                )
+        );
+    }
+
+    private ExtractedParameterData outOfRangeComparisonAiResponse() {
+        return new ExtractedParameterData(
+                "req-comparison-out-range", "VALID", "ETCH", "COMPARISON",
+                null,
+                null,
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(10.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(200.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(110.0, "W", "VALID")
+                ),
+                new ExtractedParameterData.ProcessParams(
+                        new ExtractedParameterData.ValidatedParam(4.0, "mTorr", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(600.0, "W", "VALID"),
+                        new ExtractedParameterData.ValidatedParam(200.0, "W", "VALID")
+                )
         );
     }
 
@@ -364,9 +486,37 @@ class ExtractServiceTest {
                 null,
                 LocalDateTime.now()
         );
-        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 50.0, "mTorr", "VALID", 0));
-        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "VALID", 1));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 10.0, "mTorr", "VALID", 0));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 500.0, "W", "VALID", 1));
         snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "VALID", 2));
+        return snapshot;
+    }
+
+    private MessageValidationSnapshot incompleteComparisonSnapshot() {
+        MessageValidationSnapshot snapshot = MessageValidationSnapshot.create(
+                dummyChatMessage(),
+                "req-comparison-incomplete",
+                1,
+                "AI_EXTRACT",
+                "INVALID_FIELD",
+                "ETCH",
+                "COMPARISON",
+                null,
+                null,
+                null,
+                null,
+                LocalDateTime.now()
+        );
+        snapshot.storeComparisonConditions(
+                """
+                        {"pressure":{"value":8.0,"unit":"mTorr","status":"VALID"},"source_power":{"value":null,"unit":"W","status":"MISSING"},"bias_power":{"value":null,"unit":"W","status":"MISSING"}}
+                        """,
+                """
+                        {"pressure":{"value":10.0,"unit":"mTorr","status":"VALID"},"source_power":{"value":null,"unit":"W","status":"MISSING"},"bias_power":{"value":null,"unit":"W","status":"MISSING"}}
+                        """
+        );
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", null, "W", "MISSING", 1));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", null, "W", "MISSING", 2));
         return snapshot;
     }
 
@@ -386,7 +536,7 @@ class ExtractServiceTest {
                 LocalDateTime.now()
         );
         snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", null, "mTorr", "MISSING", 0));
-        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "VALID", 1));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 500.0, "W", "VALID", 1));
         snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "VALID", 2));
         return snapshot;
     }
@@ -406,8 +556,8 @@ class ExtractServiceTest {
                 "422 Unprocessable Entity",
                 LocalDateTime.now()
         );
-        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 50.0, "mTorr", "AI_ERROR", 0));
-        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 800.0, "W", "AI_ERROR", 1));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("pressure", "Pressure", 10.0, "mTorr", "AI_ERROR", 0));
+        snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("source_power", "Source Power", 500.0, "W", "AI_ERROR", 1));
         snapshot.addItem(com.plasma.be.extract.entity.MessageValidationParam.create("bias_power", "Bias Power", 100.0, "W", "AI_ERROR", 2));
         return snapshot;
     }

@@ -37,14 +37,15 @@ import java.util.stream.Collectors;
 public class ExtractService {
 
     private static final List<ParameterDefinition> SUPPORTED_PARAMETERS = List.of(
-            new ParameterDefinition("pressure", "Pressure", "mTorr", 0),
-            new ParameterDefinition("source_power", "Source Power", "W", 1),
-            new ParameterDefinition("bias_power", "Bias Power", "W", 2)
+            new ParameterDefinition("pressure", "Pressure", "mTorr", 0, 2.0, 10.0),
+            new ParameterDefinition("source_power", "Source Power", "W", 1, 100.0, 500.0),
+            new ParameterDefinition("bias_power", "Bias Power", "W", 2, 0.0, 1000.0)
     );
 
     private static final String SOURCE_AI_EXTRACT = "AI_EXTRACT";
     private static final String SOURCE_USER_CORRECTION = "USER_CORRECTION";
     private static final String VALIDATION_AI_ERROR = "AI_ERROR";
+    private static final String VALIDATION_OUT_OF_RANGE = "OUT_OF_RANGE";
     private static final String DEFAULT_PROCESS_TYPE = "UNKNOWN";
     private static final String DEFAULT_TASK_TYPE = "UNSUPPORTED";
     private static final List<String> EMPTY_TEXT_MARKERS = List.of("无", "none", "null", "n/a", "na");
@@ -111,13 +112,31 @@ public class ExtractService {
     @Transactional(noRollbackFor = {RestClientException.class, IllegalStateException.class})
     public ParameterValidationResponse validateCorrection(Long messageId, ParameterValidationRequest request) {
         ChatMessage message = getManagedMessage(messageId);
-        Map<String, SubmittedParam> submittedParams = normalizeSubmittedParams(request);
         List<MessageValidationSnapshot> snapshots = snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(messageId);
         int attemptNo = snapshots.isEmpty() ? 1 : snapshots.get(snapshots.size() - 1).getAttemptNo() + 1;
         String processType = findLatestNonEmptyValue(snapshots, MessageValidationSnapshot::getProcessType);
         String taskType = findLatestNonEmptyValue(snapshots, MessageValidationSnapshot::getTaskType);
         String requestProcessType = processType != null ? processType : DEFAULT_PROCESS_TYPE;
         String requestTaskType = taskType != null ? taskType : DEFAULT_TASK_TYPE;
+
+        if ("COMPARISON".equals(requestTaskType)) {
+            return validateComparisonCorrection(message, attemptNo, requestProcessType, requestTaskType, snapshots, request);
+        }
+
+        Map<String, SubmittedParam> submittedParams = normalizeSubmittedParams(request);
+        if (hasOutOfRangeSubmittedParameters(submittedParams)) {
+            ExtractedParameterData data = buildOutOfRangeSubmittedData(requestProcessType, requestTaskType, submittedParams);
+            MessageValidationSnapshot snapshot = createSnapshot(
+                    message,
+                    attemptNo,
+                    SOURCE_USER_CORRECTION,
+                    data,
+                    submittedParams,
+                    taskType
+            );
+            snapshotRepository.save(snapshot);
+            return toResponse(snapshot);
+        }
 
         Map<String, Double> paramValues = submittedParams.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().value()));
@@ -207,8 +226,11 @@ public class ExtractService {
         if (snapshot.isAllValid()) {
             return true;
         }
-        return ("COMPARISON".equals(snapshot.getTaskType())
-                || "QUESTION".equals(snapshot.getTaskType())
+        if ("COMPARISON".equals(snapshot.getTaskType())) {
+            return areComparisonConditionsValid(snapshot)
+                    && !VALIDATION_AI_ERROR.equals(snapshot.getValidationStatus());
+        }
+        return ("QUESTION".equals(snapshot.getTaskType())
                 || "UNSUPPORTED".equals(snapshot.getTaskType()))
                 && !VALIDATION_AI_ERROR.equals(snapshot.getValidationStatus());
     }
@@ -278,6 +300,8 @@ public class ExtractService {
                                              String previousTaskType) {
         String validationStatus = sanitize(data.validationStatus(), "UNKNOWN");
         String requestId = sanitize(data.requestId(), UUID.randomUUID().toString());
+        String requestedTaskType = sanitize(data.taskType(), null);
+        boolean comparisonTask = "COMPARISON".equals(requestedTaskType);
 
         ExtractedParameterData.ValueWithUnit currentEr = null;
         if (data.currentOutputs() != null) {
@@ -288,32 +312,42 @@ public class ExtractService {
         List<MessageValidationParam> items = new ArrayList<>();
         boolean allParameterStatusesValid = true;
 
-        for (ParameterDefinition definition : SUPPORTED_PARAMETERS) {
-            ExtractedParameterData.ValidatedParam aiParam = aiParams.get(definition.key());
-            SubmittedParam submitted = submittedParams.get(definition.key());
-            String parameterStatus = resolveStatus(aiParam, submitted);
-            if (!"VALID".equals(parameterStatus)) {
-                allParameterStatusesValid = false;
-            }
+        if (comparisonTask && (data.conditionA() != null || data.conditionB() != null)) {
+            items.addAll(buildComparisonPromptItems(data.conditionA(), data.conditionB()));
+        } else {
+            for (ParameterDefinition definition : SUPPORTED_PARAMETERS) {
+                ExtractedParameterData.ValidatedParam aiParam = aiParams.get(definition.key());
+                SubmittedParam submitted = submittedParams.get(definition.key());
+                String parameterStatus = resolveStatus(definition, aiParam, submitted);
+                if (!"VALID".equals(parameterStatus)) {
+                    allParameterStatusesValid = false;
+                }
 
-            items.add(MessageValidationParam.create(
-                    definition.key(),
-                    definition.label(),
-                    resolveValue(aiParam, submitted),
-                    resolveUnit(aiParam, submitted, definition.defaultUnit()),
-                    parameterStatus,
-                    definition.displayOrder()
-            ));
+                items.add(MessageValidationParam.create(
+                        definition.key(),
+                        definition.label(),
+                        resolveValue(aiParam, submitted),
+                        resolveUnit(aiParam, submitted, definition.defaultUnit()),
+                        parameterStatus,
+                        definition.displayOrder()
+                ));
+            }
+        }
+
+        boolean comparisonConditionsValid = comparisonTask && areComparisonConditionsValid(data.conditionA(), data.conditionB());
+        if (comparisonTask) {
+            allParameterStatusesValid = comparisonConditionsValid;
         }
 
         String effectiveValidationStatus = resolveValidationStatus(
                 sourceType,
                 validationStatus,
-                allParameterStatusesValid
+                allParameterStatusesValid,
+                comparisonConditionsValid
         );
         String effectiveTaskType = resolveTaskType(
                 sourceType,
-                sanitize(data.taskType(), null),
+                requestedTaskType,
                 sanitize(previousTaskType, null),
                 allParameterStatusesValid
         );
@@ -407,8 +441,10 @@ public class ExtractService {
                 snapshot.getProcessType(),
                 snapshot.getTaskType(),
                 parameters,
+                buildComparisonConditionResponse("condition_a", snapshot.getConditionAJson()),
+                buildComparisonConditionResponse("condition_b", snapshot.getConditionBJson()),
                 currentEr,
-                snapshot.isAllValid(),
+                snapshot.isAllValid() || areComparisonConditionsValid(snapshot),
                 snapshot.isConfirmed(),
                 buildPrediction(snapshot),
                 snapshot.getPredictionError(),
@@ -540,12 +576,20 @@ public class ExtractService {
     }
 
     private Map<String, SubmittedParam> normalizeSubmittedParams(ParameterValidationRequest request) {
-        if (request == null || request.parameters() == null || request.parameters().isEmpty()) {
-            throw new IllegalArgumentException("parameters are required.");
+        return normalizeSubmittedParams(request == null ? null : request.parameters(), true);
+    }
+
+    private Map<String, SubmittedParam> normalizeSubmittedParams(List<ParameterInputRequest> parameters,
+                                                                 boolean requireAllParameters) {
+        if (parameters == null || parameters.isEmpty()) {
+            if (requireAllParameters) {
+                throw new IllegalArgumentException("parameters are required.");
+            }
+            return Map.of();
         }
 
         Map<String, SubmittedParam> submitted = new LinkedHashMap<>();
-        for (ParameterInputRequest parameter : request.parameters()) {
+        for (ParameterInputRequest parameter : parameters) {
             if (parameter == null || !StringUtils.hasText(parameter.key())) {
                 throw new IllegalArgumentException("parameter key is required.");
             }
@@ -556,7 +600,14 @@ public class ExtractService {
             if (submitted.containsKey(key)) {
                 throw new IllegalArgumentException("duplicate parameter key: " + key);
             }
+            if (SUPPORTED_PARAMETERS.stream().noneMatch(definition -> definition.key().equals(key))) {
+                throw new IllegalArgumentException("unsupported parameter key: " + key);
+            }
             submitted.put(key, new SubmittedParam(key, parameter.value(), parameter.unit()));
+        }
+
+        if (!requireAllParameters) {
+            return submitted;
         }
 
         List<String> missingKeys = SUPPORTED_PARAMETERS.stream()
@@ -567,6 +618,272 @@ public class ExtractService {
             throw new IllegalArgumentException("missing parameters: " + String.join(", ", missingKeys));
         }
         return submitted;
+    }
+
+    private ParameterValidationResponse validateComparisonCorrection(ChatMessage message,
+                                                                     int attemptNo,
+                                                                     String processType,
+                                                                     String taskType,
+                                                                     List<MessageValidationSnapshot> snapshots,
+                                                                     ParameterValidationRequest request) {
+        MessageValidationSnapshot latestSnapshot = snapshots.isEmpty() ? null : snapshots.get(snapshots.size() - 1);
+        if (latestSnapshot == null) {
+            throw new IllegalArgumentException("Comparison correction requires an existing validation snapshot.");
+        }
+
+        ExtractedParameterData.ProcessParams baseConditionA = readProcessParams(latestSnapshot.getConditionAJson());
+        ExtractedParameterData.ProcessParams baseConditionB = readProcessParams(latestSnapshot.getConditionBJson());
+        if (baseConditionA == null || baseConditionB == null) {
+            throw new IllegalArgumentException("Comparison correction requires two extracted conditions.");
+        }
+
+        ComparisonCorrection correction = normalizeComparisonCorrection(request);
+        ExtractedParameterData.ProcessParams correctedConditionA = mergeComparisonCondition(
+                baseConditionA,
+                correction.sharedParameters(),
+                correction.conditionAParameters()
+        );
+        ExtractedParameterData.ProcessParams correctedConditionB = mergeComparisonCondition(
+                baseConditionB,
+                correction.sharedParameters(),
+                correction.conditionBParameters()
+        );
+
+        ExtractedParameterData correctedData = new ExtractedParameterData(
+                UUID.randomUUID().toString(),
+                areComparisonConditionsValid(correctedConditionA, correctedConditionB) ? "VALID" : "INVALID_FIELD",
+                processType,
+                taskType,
+                null,
+                null,
+                correctedConditionA,
+                correctedConditionB
+        );
+
+        MessageValidationSnapshot snapshot = createSnapshot(
+                message,
+                attemptNo,
+                SOURCE_USER_CORRECTION,
+                correctedData,
+                Map.of(),
+                taskType
+        );
+        snapshotRepository.save(snapshot);
+        return toResponse(snapshot);
+    }
+
+    private ComparisonCorrection normalizeComparisonCorrection(ParameterValidationRequest request) {
+        Map<String, SubmittedParam> sharedParameters = normalizeSubmittedParams(
+                request == null ? null : request.parameters(),
+                false
+        );
+        Map<String, SubmittedParam> conditionAParameters = normalizeComparisonConditionParameters(
+                request == null ? null : request.conditionA()
+        );
+        Map<String, SubmittedParam> conditionBParameters = normalizeComparisonConditionParameters(
+                request == null ? null : request.conditionB()
+        );
+
+        if (sharedParameters.isEmpty() && conditionAParameters.isEmpty() && conditionBParameters.isEmpty()) {
+            throw new IllegalArgumentException("comparison correction parameters are required.");
+        }
+
+        return new ComparisonCorrection(sharedParameters, conditionAParameters, conditionBParameters);
+    }
+
+    private boolean hasOutOfRangeSubmittedParameters(Map<String, SubmittedParam> submittedParams) {
+        return submittedParams.entrySet().stream()
+                .anyMatch(entry -> {
+                    ParameterDefinition definition = parameterDefinition(entry.getKey());
+                    Double value = entry.getValue() == null ? null : entry.getValue().value();
+                    return definition.isOutOfRange(value);
+                });
+    }
+
+    private ExtractedParameterData buildOutOfRangeSubmittedData(String processType,
+                                                                String taskType,
+                                                                Map<String, SubmittedParam> submittedParams) {
+        return new ExtractedParameterData(
+                UUID.randomUUID().toString(),
+                "INVALID_FIELD",
+                processType,
+                taskType,
+                new ExtractedParameterData.ProcessParams(
+                        submittedValidatedParam("pressure", submittedParams, "mTorr"),
+                        submittedValidatedParam("source_power", submittedParams, "W"),
+                        submittedValidatedParam("bias_power", submittedParams, "W")
+                ),
+                null,
+                null,
+                null
+        );
+    }
+
+    private ExtractedParameterData.ValidatedParam submittedValidatedParam(String key,
+                                                                          Map<String, SubmittedParam> submittedParams,
+                                                                          String defaultUnit) {
+        SubmittedParam submitted = submittedParams.get(key);
+        if (submitted == null) {
+            return new ExtractedParameterData.ValidatedParam(null, defaultUnit, "MISSING");
+        }
+        return new ExtractedParameterData.ValidatedParam(
+                submitted.value(),
+                sanitize(submitted.unit(), defaultUnit),
+                "VALID"
+        );
+    }
+
+    private Map<String, SubmittedParam> normalizeComparisonConditionParameters(ParameterValidationRequest.ComparisonConditionInput conditionInput) {
+        return normalizeSubmittedParams(conditionInput == null ? null : conditionInput.parameters(), false);
+    }
+
+    private ExtractedParameterData.ProcessParams mergeComparisonCondition(ExtractedParameterData.ProcessParams base,
+                                                                         Map<String, SubmittedParam> sharedParameters,
+                                                                         Map<String, SubmittedParam> specificParameters) {
+        return new ExtractedParameterData.ProcessParams(
+                mergeComparisonParam("pressure", base == null ? null : base.pressure(), sharedParameters, specificParameters, "mTorr"),
+                mergeComparisonParam("source_power", base == null ? null : base.sourcePower(), sharedParameters, specificParameters, "W"),
+                mergeComparisonParam("bias_power", base == null ? null : base.biasPower(), sharedParameters, specificParameters, "W")
+        );
+    }
+
+    private ExtractedParameterData.ValidatedParam mergeComparisonParam(String key,
+                                                                       ExtractedParameterData.ValidatedParam baseParam,
+                                                                       Map<String, SubmittedParam> sharedParameters,
+                                                                       Map<String, SubmittedParam> specificParameters,
+                                                                       String defaultUnit) {
+        SubmittedParam specific = specificParameters.get(key);
+        if (specific != null) {
+            return new ExtractedParameterData.ValidatedParam(
+                    specific.value(),
+                    sanitize(specific.unit(), defaultUnit),
+                    "VALID"
+            );
+        }
+
+        SubmittedParam shared = sharedParameters.get(key);
+        if (shared != null) {
+            return new ExtractedParameterData.ValidatedParam(
+                    shared.value(),
+                    sanitize(shared.unit(), defaultUnit),
+                    "VALID"
+            );
+        }
+
+        if (baseParam == null) {
+            return new ExtractedParameterData.ValidatedParam(null, defaultUnit, "MISSING");
+        }
+        return new ExtractedParameterData.ValidatedParam(
+                baseParam.value(),
+                resolveUnit(baseParam, null, defaultUnit),
+                baseParam.value() == null ? "MISSING" : resolveStatus(parameterDefinition(key), baseParam, null)
+        );
+    }
+
+    private List<MessageValidationParam> buildComparisonPromptItems(ExtractedParameterData.ProcessParams conditionA,
+                                                                    ExtractedParameterData.ProcessParams conditionB) {
+        Map<String, ExtractedParameterData.ValidatedParam> left = toValidatedParamMap(conditionA);
+        Map<String, ExtractedParameterData.ValidatedParam> right = toValidatedParamMap(conditionB);
+        List<MessageValidationParam> items = new ArrayList<>();
+
+        for (ParameterDefinition definition : SUPPORTED_PARAMETERS) {
+            ComparisonPromptField promptField = resolveComparisonPromptField(
+                    definition,
+                    left.get(definition.key()),
+                    right.get(definition.key())
+            );
+            if (promptField == null) {
+                continue;
+            }
+            items.add(MessageValidationParam.create(
+                    definition.key(),
+                    definition.label(),
+                    promptField.value(),
+                    promptField.unit(),
+                    promptField.status(),
+                    definition.displayOrder()
+            ));
+        }
+        return items;
+    }
+
+    private ComparisonPromptField resolveComparisonPromptField(ParameterDefinition definition,
+                                                               ExtractedParameterData.ValidatedParam left,
+                                                               ExtractedParameterData.ValidatedParam right) {
+        if (isSameValidValue(definition, left, right)) {
+            return null;
+        }
+        if (isValidParam(definition, left) && isValidParam(definition, right)) {
+            return null;
+        }
+
+        boolean leftOutOfRange = isOutOfRange(definition, left);
+        boolean rightOutOfRange = isOutOfRange(definition, right);
+        Double suggestedValue = leftOutOfRange ? left.value()
+                : rightOutOfRange ? right.value()
+                : firstNonNull(
+                        left == null ? null : left.value(),
+                        right == null ? null : right.value()
+                );
+        String suggestedUnit = leftOutOfRange ? resolveUnit(left, null, definition.defaultUnit())
+                : rightOutOfRange ? resolveUnit(right, null, definition.defaultUnit())
+                : firstNonBlank(
+                        left == null ? null : left.unit(),
+                        right == null ? null : right.unit(),
+                        definition.defaultUnit()
+                );
+        return new ComparisonPromptField(
+                suggestedValue,
+                suggestedUnit,
+                comparisonPromptStatus(definition, left, right)
+        );
+    }
+
+    private Map<String, ExtractedParameterData.ValidatedParam> toValidatedParamMap(ExtractedParameterData.ProcessParams processParams) {
+        if (processParams == null) {
+            return Map.of();
+        }
+        Map<String, ExtractedParameterData.ValidatedParam> result = new LinkedHashMap<>();
+        result.put("pressure", processParams.pressure());
+        result.put("source_power", processParams.sourcePower());
+        result.put("bias_power", processParams.biasPower());
+        return result;
+    }
+
+    private boolean isSameValidValue(ParameterDefinition definition,
+                                     ExtractedParameterData.ValidatedParam left,
+                                     ExtractedParameterData.ValidatedParam right) {
+        return isValidParam(definition, left)
+                && isValidParam(definition, right)
+                && java.util.Objects.equals(left.value(), right.value())
+                && java.util.Objects.equals(resolveUnit(left, null, ""), resolveUnit(right, null, ""));
+    }
+
+    private boolean isValidParam(ParameterDefinition definition,
+                                 ExtractedParameterData.ValidatedParam param) {
+        return param != null
+                && param.value() != null
+                && "VALID".equals(resolveStatus(definition, param, null));
+    }
+
+    @SafeVarargs
+    private final <T> T firstNonNull(T... values) {
+        for (T value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            String normalized = sanitize(value, null);
+            if (normalized != null) {
+                return normalized;
+            }
+        }
+        return null;
     }
 
     private Double resolveValue(ExtractedParameterData.ValidatedParam aiParam, SubmittedParam submitted) {
@@ -594,7 +911,13 @@ public class ExtractService {
         return defaultUnit;
     }
 
-    private String resolveStatus(ExtractedParameterData.ValidatedParam aiParam, SubmittedParam submitted) {
+    private String resolveStatus(ParameterDefinition definition,
+                                 ExtractedParameterData.ValidatedParam aiParam,
+                                 SubmittedParam submitted) {
+        Double resolvedValue = resolveValue(aiParam, submitted);
+        if (resolvedValue != null && definition.isOutOfRange(resolvedValue)) {
+            return VALIDATION_OUT_OF_RANGE;
+        }
         if (aiParam != null) {
             String normalizedAiStatus = sanitize(aiParam.status(), null);
             if (normalizedAiStatus != null) {
@@ -607,9 +930,39 @@ public class ExtractService {
         return "MISSING";
     }
 
+    private String comparisonPromptStatus(ParameterDefinition definition,
+                                          ExtractedParameterData.ValidatedParam left,
+                                          ExtractedParameterData.ValidatedParam right) {
+        if (isOutOfRange(definition, left) || isOutOfRange(definition, right)) {
+            return VALIDATION_OUT_OF_RANGE;
+        }
+        return "MISSING";
+    }
+
+    private boolean isOutOfRange(ParameterDefinition definition,
+                                 ExtractedParameterData.ValidatedParam param) {
+        return param != null
+                && param.value() != null
+                && definition.isOutOfRange(param.value());
+    }
+
+    private ParameterDefinition parameterDefinition(String key) {
+        return SUPPORTED_PARAMETERS.stream()
+                .filter(definition -> definition.key().equals(key))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported parameter key: " + key));
+    }
+
     private String resolveValidationStatus(String sourceType,
                                            String validationStatus,
-                                           boolean allParameterStatusesValid) {
+                                           boolean allParameterStatusesValid,
+                                           boolean comparisonConditionsValid) {
+        if (comparisonConditionsValid) {
+            return "VALID";
+        }
+        if (!allParameterStatusesValid && "VALID".equals(validationStatus)) {
+            return "INVALID_FIELD";
+        }
         if (SOURCE_USER_CORRECTION.equals(sourceType) && allParameterStatusesValid) {
             // 원문이 의미 없어서 AI가 UNSUPPORTED를 반환해도,
             // 사용자가 모든 공정조건을 채워 넣고 각 파라미터가 VALID면 수정 결과는 성공으로 본다.
@@ -650,7 +1003,96 @@ public class ExtractService {
         return trimmed;
     }
 
-    private record ParameterDefinition(String key, String label, String defaultUnit, int displayOrder) {
+    private ParameterValidationResponse.ComparisonConditionResponse buildComparisonConditionResponse(String label, String processParamsJson) {
+        ExtractedParameterData.ProcessParams processParams = readProcessParams(processParamsJson);
+        if (processParams == null) {
+            return null;
+        }
+        return new ParameterValidationResponse.ComparisonConditionResponse(
+                label,
+                toParameterFields(processParams)
+        );
+    }
+
+    private ExtractedParameterData.ProcessParams readProcessParams(String processParamsJson) {
+        if (!StringUtils.hasText(processParamsJson)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(processParamsJson, ExtractedParameterData.ProcessParams.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to deserialize comparison conditions.", exception);
+        }
+    }
+
+    private boolean areComparisonConditionsValid(MessageValidationSnapshot snapshot) {
+        return areComparisonConditionsValid(
+                readProcessParams(snapshot.getConditionAJson()),
+                readProcessParams(snapshot.getConditionBJson())
+        );
+    }
+
+    private boolean areComparisonConditionsValid(ExtractedParameterData.ProcessParams conditionA,
+                                                 ExtractedParameterData.ProcessParams conditionB) {
+        return isValidCondition(conditionA) && isValidCondition(conditionB);
+    }
+
+    private boolean isValidCondition(ExtractedParameterData.ProcessParams processParams) {
+        if (processParams == null) {
+            return false;
+        }
+        return toParameterFields(processParams).stream()
+                .allMatch(parameter -> "VALID".equals(parameter.status()));
+    }
+
+    private List<ParameterFieldResponse> toParameterFields(ExtractedParameterData.ProcessParams processParams) {
+        return List.of(
+                comparisonField("pressure", "Pressure", "mTorr", processParams.pressure(), 0),
+                comparisonField("source_power", "Source Power", "W", processParams.sourcePower(), 1),
+                comparisonField("bias_power", "Bias Power", "W", processParams.biasPower(), 2)
+        ).stream()
+                .sorted(java.util.Comparator.comparingInt(IndexedParameter::order))
+                .map(IndexedParameter::parameter)
+                .toList();
+    }
+
+    private IndexedParameter comparisonField(String key,
+                                             String label,
+                                             String defaultUnit,
+                                             ExtractedParameterData.ValidatedParam param,
+                                             int order) {
+        return new IndexedParameter(
+                order,
+                new ParameterFieldResponse(
+                        key,
+                        label,
+                        param == null ? null : param.value(),
+                        param == null ? defaultUnit : resolveUnit(param, null, defaultUnit),
+                        param == null ? "MISSING" : resolveStatus(parameterDefinition(key), param, null)
+                )
+        );
+    }
+
+    private record ParameterDefinition(String key,
+                                       String label,
+                                       String defaultUnit,
+                                       int displayOrder,
+                                       double minValue,
+                                       double maxValue) {
+        private boolean isOutOfRange(Double value) {
+            return value != null && (value < minValue || value > maxValue);
+        }
+    }
+
+    private record IndexedParameter(int order, ParameterFieldResponse parameter) {
+    }
+
+    private record ComparisonPromptField(Double value, String unit, String status) {
+    }
+
+    private record ComparisonCorrection(Map<String, SubmittedParam> sharedParameters,
+                                        Map<String, SubmittedParam> conditionAParameters,
+                                        Map<String, SubmittedParam> conditionBParameters) {
     }
 
     private record SubmittedParam(String key, Double value, String unit) {
