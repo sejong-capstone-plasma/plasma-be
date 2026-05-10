@@ -1,33 +1,36 @@
 package com.plasma.be.plasma.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
 import com.plasma.be.plasma.entity.PlasmaDistribution;
 import com.plasma.be.plasma.repository.PlasmaDistributionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class PlasmaDistributionService {
 
-    private static final double[] PRESSURE_GRID    = {2.0, 4.0, 6.0, 8.0, 10.0};
+    private static final Logger log = LoggerFactory.getLogger(PlasmaDistributionService.class);
+
+    private static final double[] PRESSURE_GRID     = {2.0, 4.0, 6.0, 8.0, 10.0};
     private static final double[] SOURCE_POWER_GRID = {100.0, 200.0, 300.0, 400.0, 500.0};
     private static final double[] BIAS_POWER_GRID   = {0.0, 200.0, 400.0, 600.0, 800.0, 1000.0};
 
     private final PlasmaDistributionRepository repository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public PlasmaDistributionService(PlasmaDistributionRepository repository) {
         this.repository = repository;
     }
 
     public Optional<PlasmaDistribution> findClosest(double pressure, double sourcePower, double biasPower) {
-        double snappedPressure   = snapToNearest(pressure,    PRESSURE_GRID);
+        double snappedPressure    = snapToNearest(pressure,    PRESSURE_GRID);
         double snappedSourcePower = snapToNearest(sourcePower, SOURCE_POWER_GRID);
-        double snappedBiasPower  = snapToNearest(biasPower,   BIAS_POWER_GRID);
+        double snappedBiasPower   = snapToNearest(biasPower,   BIAS_POWER_GRID);
         return repository.findByPrsAndSourcePowerAndBiasPower(snappedPressure, snappedSourcePower, snappedBiasPower);
     }
 
@@ -46,9 +49,20 @@ public class PlasmaDistributionService {
 
     private List<Double> parseJsonArray(String json) {
         if (json == null || json.isBlank()) return List.of();
+        String trimmed = json.trim();
+        if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+            log.warn("Unexpected JSON array format: {}", trimmed.length() > 100 ? trimmed.substring(0, 100) : trimmed);
+            return List.of();
+        }
+        String inner = trimmed.substring(1, trimmed.length() - 1).trim();
+        if (inner.isEmpty()) return List.of();
         try {
-            return objectMapper.readValue(json, new TypeReference<List<Double>>() {});
-        } catch (Exception e) {
+            return Arrays.stream(inner.split(","))
+                    .map(String::trim)
+                    .map(Double::parseDouble)
+                    .collect(Collectors.toList());
+        } catch (NumberFormatException e) {
+            log.warn("Failed to parse JSON array element: {}", e.getMessage());
             return List.of();
         }
     }
