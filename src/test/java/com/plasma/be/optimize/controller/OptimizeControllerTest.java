@@ -1,7 +1,5 @@
 package com.plasma.be.optimize.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.plasma.be.optimize.client.OptimizeClient;
 import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
 import com.plasma.be.optimize.dto.OptimizeRequest;
@@ -22,8 +20,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class OptimizeControllerTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
     @Mock
     private OptimizeClient optimizeClient;
 
@@ -33,10 +29,8 @@ class OptimizeControllerTest {
     @Test
     void optimizeRaw_AI응답을_그대로_반환한다() {
         OptimizeRequest request = validRequest();
-        ObjectNode aiPayload = objectMapper.createObjectNode()
-                .put("status", "ok")
-                .put("summary", "optimized");
-        OptimizePipelineResponse aiResponse = new OptimizePipelineResponse(aiPayload);
+        OptimizePipelineResponse aiResponse = new OptimizePipelineResponse(
+                "req-001", "ETCH", null, null, null);
         when(optimizeClient.requestOptimizePipeline(any())).thenReturn(aiResponse);
 
         ResponseEntity<OptimizePipelineResponse> response = optimizeController.optimizeRaw(request);

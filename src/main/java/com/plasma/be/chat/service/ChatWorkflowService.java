@@ -1,6 +1,5 @@
 package com.plasma.be.chat.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plasma.be.chat.dto.ConfirmOptimizationResponse;
 import com.plasma.be.chat.dto.ChatMessageCreateRequest;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
@@ -42,7 +41,6 @@ public class ChatWorkflowService {
     private final OptimizeClient optimizeClient;
     private final ComparisonService comparisonService;
     private final QuestionService questionService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ChatWorkflowService(ChatMessageService chatMessageService,
                                ExtractService extractService,
@@ -111,9 +109,10 @@ public class ChatWorkflowService {
         }
         if ("OPTIMIZATION".equals(taskType)) {
             try {
+                PredictPipelineResponse currentPrediction = runPredictPipeline(message, validation);
+                OptimizePipelineResponse optimizeResult = runOptimizePipeline(message, validation);
                 ConfirmOptimizationResponse optimization = toConfirmOptimizationResponse(
-                        runOptimizePipeline(message, validation)
-                );
+                        optimizeResult, validation, currentPrediction);
                 return new ConfirmResponse(validation, null, optimization, null, null, null, null);
             } catch (RestClientException e) {
                 return new ConfirmResponse(validation, null, null, null, null, null, e.getMessage());
@@ -225,32 +224,67 @@ public class ChatWorkflowService {
         ));
     }
 
-    private ConfirmOptimizationResponse toConfirmOptimizationResponse(OptimizePipelineResponse optimization) {
-        if (optimization == null || optimization.payload() == null) {
+    private ConfirmOptimizationResponse toConfirmOptimizationResponse(
+            OptimizePipelineResponse optimization,
+            ParameterValidationResponse validation,
+            PredictPipelineResponse currentPrediction) {
+
+        if (optimization == null || optimization.optimizationResult() == null) {
             return null;
         }
 
-        try {
-            ConfirmOptimizationResponse mapped = objectMapper.convertValue(
-                    optimization.payload(),
-                    ConfirmOptimizationResponse.class
-            );
-            if (mapped == null || mapped.candidates() == null) {
-                return mapped;
-            }
+        ConfirmOptimizationResponse.Current current = new ConfirmOptimizationResponse.Current(
+                buildProcessParams(validation),
+                currentPrediction != null ? currentPrediction.predictionResult() : null
+        );
 
-            List<ConfirmOptimizationResponse.Candidate> candidates = mapped.candidates().stream()
-                    .sorted(Comparator.comparingDouble(this::candidateEtchScore).reversed())
-                    .limit(MAX_OPTIMIZATION_CANDIDATES)
-                    .toList();
+        List<ConfirmOptimizationResponse.Candidate> candidates = optimization
+                .optimizationResult()
+                .optimizationCandidates()
+                .stream()
+                .sorted(Comparator.comparingDouble(this::candidateEtchScore).reversed())
+                .limit(MAX_OPTIMIZATION_CANDIDATES)
+                .map(c -> new ConfirmOptimizationResponse.Candidate(
+                        (long) c.rank(),
+                        toConfirmProcessParams(c.processParams()),
+                        c.predictionResult()))
+                .toList();
 
-            return new ConfirmOptimizationResponse(mapped.current(), candidates);
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalStateException("Unexpected optimization response shape.", exception);
-        }
+        return new ConfirmOptimizationResponse(current, candidates);
     }
 
-    private double candidateEtchScore(ConfirmOptimizationResponse.Candidate candidate) {
+    private ConfirmOptimizationResponse.ProcessParams buildProcessParams(ParameterValidationResponse validation) {
+        Map<String, ParameterFieldResponse> paramMap = validation.parameters().stream()
+                .collect(Collectors.toMap(ParameterFieldResponse::key, Function.identity()));
+        return new ConfirmOptimizationResponse.ProcessParams(
+                toParamValue(paramMap.get("pressure")),
+                toParamValue(paramMap.get("source_power")),
+                toParamValue(paramMap.get("bias_power"))
+        );
+    }
+
+    private ConfirmOptimizationResponse.ParamValue toParamValue(ParameterFieldResponse field) {
+        if (field == null) return null;
+        return new ConfirmOptimizationResponse.ParamValue(field.value(), field.unit());
+    }
+
+    private ConfirmOptimizationResponse.ProcessParams toConfirmProcessParams(
+            OptimizePipelineResponse.ProcessParams params) {
+        if (params == null) return null;
+        return new ConfirmOptimizationResponse.ProcessParams(
+                toConfirmParamValue(params.pressure()),
+                toConfirmParamValue(params.sourcePower()),
+                toConfirmParamValue(params.biasPower())
+        );
+    }
+
+    private ConfirmOptimizationResponse.ParamValue toConfirmParamValue(
+            OptimizePipelineResponse.ValueWithUnit v) {
+        if (v == null) return null;
+        return new ConfirmOptimizationResponse.ParamValue(v.value(), v.unit());
+    }
+
+    private double candidateEtchScore(OptimizePipelineResponse.OptimizationCandidate candidate) {
         if (candidate == null
                 || candidate.predictionResult() == null
                 || candidate.predictionResult().etchScore() == null
