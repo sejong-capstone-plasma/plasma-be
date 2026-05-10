@@ -3,12 +3,14 @@ package com.plasma.be.chat.controller;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.compare.client.CompareClient;
-import com.plasma.be.compare.dto.ComparisonResponse;
+import com.plasma.be.compare.client.dto.ComparisonPipelineAiResponse;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
 import com.plasma.be.optimize.client.OptimizeClient;
+import com.plasma.be.optimize.client.ParameterImpactClient;
 import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
+import com.plasma.be.optimize.client.dto.ParameterImpactResponse;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.question.client.QuestionClient;
@@ -65,6 +67,9 @@ class ChatMessageControllerTest {
     @MockitoBean
     private QuestionClient questionClient;
 
+    @MockitoBean
+    private ParameterImpactClient parameterImpactClient;
+
     @BeforeEach
     void setUp() {
         snapshotRepository.deleteAll();
@@ -76,6 +81,7 @@ class ChatMessageControllerTest {
         when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenReturn(validComparisonResponse());
         when(questionClient.requestAnswer(anyString(), any())).thenReturn(aiQuestionAnswerResponse());
+        when(parameterImpactClient.requestParameterImpact(any(), any())).thenReturn(validParameterImpactResponse());
     }
 
     @Test
@@ -754,10 +760,10 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.comparison.left.label").value("condition_a"))
+                .andExpect(jsonPath("$.comparison.left.label").value("left"))
                 .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(10.0))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
-                .andExpect(jsonPath("$.comparison.right.label").value("condition_b"))
+                .andExpect(jsonPath("$.comparison.right.label").value("right"))
                 .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
                 .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(710.0));
     }
@@ -811,9 +817,9 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.comparison.left.label").value("condition_a"))
+                .andExpect(jsonPath("$.comparison.left.label").value("left"))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(400.0))
-                .andExpect(jsonPath("$.comparison.right.label").value("condition_b"))
+                .andExpect(jsonPath("$.comparison.right.label").value("right"))
                 .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
                 .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0));
     }
@@ -1181,7 +1187,7 @@ class ChatMessageControllerTest {
         return new OptimizePipelineResponse.OptimizationCandidate(rank, processParams, predictionResult, null, etchScore);
     }
 
-    private ComparisonResponse validComparisonResponse() {
+    private ComparisonPipelineAiResponse validComparisonResponse() {
         return comparisonFromParams(
                 java.util.Map.of("pressure", 10.0, "source_power", 500.0, "bias_power", 100.0),
                 java.util.Map.of("pressure", 10.0, "source_power", 500.0, "bias_power", 200.0)
@@ -1250,48 +1256,47 @@ class ChatMessageControllerTest {
     }
 
     @SuppressWarnings("unchecked")
-    private ComparisonResponse comparisonFromParams(Object rawLeftParams, Object rawRightParams) {
+    private ComparisonPipelineAiResponse comparisonFromParams(Object rawLeftParams, Object rawRightParams) {
         java.util.Map<String, Double> leftParams = (java.util.Map<String, Double>) rawLeftParams;
         java.util.Map<String, Double> rightParams = (java.util.Map<String, Double>) rawRightParams;
 
-        PredictPipelineResponse leftPrediction = predictionFromParams(leftParams);
-        PredictPipelineResponse rightPrediction = predictionFromParams(rightParams);
-        double etchScoreDelta = rightPrediction.predictionResult().etchScore().value()
-                - leftPrediction.predictionResult().etchScore().value();
+        PredictPipelineResponse.PredictionResult leftResult = predictionResultFromParams(leftParams);
+        PredictPipelineResponse.PredictionResult rightResult = predictionResultFromParams(rightParams);
 
-        return new ComparisonResponse(
-                new ComparisonResponse.ConditionResult("left", "ETCH", java.util.List.of(), leftPrediction),
-                new ComparisonResponse.ConditionResult("right", "ETCH", java.util.List.of(), rightPrediction),
-                new ComparisonResponse.Difference(
-                        delta(leftPrediction.predictionResult().ionFlux().value(), rightPrediction.predictionResult().ionFlux().value()),
-                        "a.u.",
-                        delta(leftPrediction.predictionResult().ionEnergy().value(), rightPrediction.predictionResult().ionEnergy().value()),
-                        "eV",
-                        etchScoreDelta,
-                        "score"
-                ),
-                "비교 완료"
+        var conditionA = new ComparisonPipelineAiResponse.ConditionResult(
+                buildAiProcessParams(leftParams),
+                leftResult,
+                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+        );
+        var conditionB = new ComparisonPipelineAiResponse.ConditionResult(
+                buildAiProcessParams(rightParams),
+                rightResult,
+                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+        );
+        return new ComparisonPipelineAiResponse("cmp-dynamic", "ETCH", conditionA, conditionB);
+    }
+
+    private ComparisonPipelineAiResponse.ProcessParams buildAiProcessParams(java.util.Map<String, Double> params) {
+        return new ComparisonPipelineAiResponse.ProcessParams(
+                new ComparisonPipelineAiResponse.ValueWithUnit(params.getOrDefault("pressure", 0.0), "mTorr"),
+                new ComparisonPipelineAiResponse.ValueWithUnit(params.getOrDefault("source_power", 0.0), "W"),
+                new ComparisonPipelineAiResponse.ValueWithUnit(params.getOrDefault("bias_power", 0.0), "W")
         );
     }
 
-    private PredictPipelineResponse predictionFromParams(java.util.Map<String, Double> params) {
+    private PredictPipelineResponse.PredictionResult predictionResultFromParams(java.util.Map<String, Double> params) {
         double pressure = params.getOrDefault("pressure", 0.0);
         double sourcePower = params.getOrDefault("source_power", 0.0);
         double biasPower = params.getOrDefault("bias_power", 0.0);
-
-        return new PredictPipelineResponse(
-                "predict-dynamic",
-                "ETCH",
-                new PredictPipelineResponse.PredictionResult(
-                        new PredictPipelineResponse.ValueWithUnit(pressure, "a.u."),
-                        new PredictPipelineResponse.ValueWithUnit(sourcePower, "eV"),
-                        new PredictPipelineResponse.ValueWithUnit(pressure + sourcePower + biasPower, "score")
-                ),
-                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+        return new PredictPipelineResponse.PredictionResult(
+                new PredictPipelineResponse.ValueWithUnit(pressure, "a.u."),
+                new PredictPipelineResponse.ValueWithUnit(sourcePower, "eV"),
+                new PredictPipelineResponse.ValueWithUnit(pressure + sourcePower + biasPower, "score")
         );
     }
 
-    private double delta(double left, double right) {
-        return right - left;
+    private ParameterImpactResponse validParameterImpactResponse() {
+        var points = java.util.List.of(new ParameterImpactResponse.ImpactPoint(10.0, 7.5));
+        return new ParameterImpactResponse("pi-001", "ETCH", points, points, points);
     }
 }

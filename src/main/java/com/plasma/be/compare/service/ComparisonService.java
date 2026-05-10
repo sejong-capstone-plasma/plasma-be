@@ -4,12 +4,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.compare.client.CompareClient;
+import com.plasma.be.compare.client.dto.ComparisonPipelineAiResponse;
 import com.plasma.be.compare.dto.ComparisonResponse;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.dto.ParameterFieldResponse;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
 import com.plasma.be.extract.entity.MessageValidationSnapshot;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
+import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -55,7 +57,7 @@ public class ComparisonService {
         Condition left = parsed.left().withProcessType(processType);
         Condition right = parsed.right().withProcessType(processType);
 
-        ComparisonResponse upstream = compareClient.requestComparePipeline(
+        ComparisonPipelineAiResponse aiResponse = compareClient.requestComparePipeline(
                 processType,
                 left.values(),
                 left.units(),
@@ -64,7 +66,7 @@ public class ComparisonService {
                 message.getInputText()
         );
 
-        return mergeResponse(upstream, left, right, processType);
+        return buildResponse(aiResponse, left, right, processType);
     }
 
     private ParsedComparison parseFromExtract(ParameterValidationResponse validation) {
@@ -84,8 +86,8 @@ public class ComparisonService {
         }
 
         return new ParsedComparison(
-                toCondition("condition_a", conditionA),
-                toCondition("condition_b", conditionB)
+                toCondition("left", conditionA),
+                toCondition("right", conditionB)
         );
     }
 
@@ -119,26 +121,63 @@ public class ComparisonService {
                 : param.unit());
     }
 
-    private ComparisonResponse mergeResponse(ComparisonResponse upstream,
+    private ComparisonResponse buildResponse(ComparisonPipelineAiResponse ai,
                                              Condition left,
                                              Condition right,
                                              String processType) {
+        PredictPipelineResponse leftPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionA());
+        PredictPipelineResponse rightPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionB());
         return new ComparisonResponse(
-                mergeConditionResult(left, processType, upstream == null ? null : upstream.left()),
-                mergeConditionResult(right, processType, upstream == null ? null : upstream.right()),
-                upstream == null ? null : upstream.difference(),
-                upstream == null ? null : upstream.summary()
+                buildConditionResult(left, processType, leftPrediction),
+                buildConditionResult(right, processType, rightPrediction),
+                calculateDifference(leftPrediction, rightPrediction),
+                null
         );
     }
 
-    private ComparisonResponse.ConditionResult mergeConditionResult(Condition condition,
-                                                                   String processType,
-                                                                   ComparisonResponse.ConditionResult upstream) {
+    private PredictPipelineResponse toPredictResponse(ComparisonPipelineAiResponse ai,
+                                                       ComparisonPipelineAiResponse.ConditionResult c) {
+        if (ai == null || c == null) return null;
+        return new PredictPipelineResponse(
+                ai.requestId(),
+                ai.processType(),
+                c.predictionResult(),
+                c.explanation()
+        );
+    }
+
+    private ComparisonResponse.Difference calculateDifference(PredictPipelineResponse left,
+                                                               PredictPipelineResponse right) {
+        if (left == null || right == null) return null;
+        PredictPipelineResponse.PredictionResult l = left.predictionResult();
+        PredictPipelineResponse.PredictionResult r = right.predictionResult();
+        if (l == null || r == null) return null;
+        return new ComparisonResponse.Difference(
+                delta(l.ionFlux() != null ? l.ionFlux().value() : null,
+                      r.ionFlux() != null ? r.ionFlux().value() : null),
+                r.ionFlux() != null ? r.ionFlux().unit() : null,
+                delta(l.ionEnergy() != null ? l.ionEnergy().value() : null,
+                      r.ionEnergy() != null ? r.ionEnergy().value() : null),
+                r.ionEnergy() != null ? r.ionEnergy().unit() : null,
+                delta(l.etchScore() != null ? l.etchScore().value() : null,
+                      r.etchScore() != null ? r.etchScore().value() : null),
+                r.etchScore() != null ? r.etchScore().unit() : null
+        );
+    }
+
+    private Double delta(Double left, Double right) {
+        if (left == null || right == null) return null;
+        return right - left;
+    }
+
+    private ComparisonResponse.ConditionResult buildConditionResult(Condition condition,
+                                                                     String processType,
+                                                                     PredictPipelineResponse prediction) {
         return new ComparisonResponse.ConditionResult(
                 condition.label(),
-                firstNonBlank(condition.processType(), upstream == null ? null : upstream.processType(), processType),
+                firstNonBlank(condition.processType(), processType),
                 condition.toParameterResponses(),
-                upstream == null ? null : upstream.prediction()
+                prediction
         );
     }
 

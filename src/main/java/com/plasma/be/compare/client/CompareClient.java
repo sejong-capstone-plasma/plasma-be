@@ -1,6 +1,6 @@
 package com.plasma.be.compare.client;
 
-import com.plasma.be.compare.dto.ComparisonResponse;
+import com.plasma.be.compare.client.dto.ComparisonPipelineAiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -26,7 +26,7 @@ public class CompareClient {
         this.httpClient = restClient;
     }
 
-    public ComparisonResponse requestComparePipeline(String processType,
+    public ComparisonPipelineAiResponse requestComparePipeline(String processType,
                                                      Map<String, Double> leftParamValues,
                                                      Map<String, String> leftParamUnits,
                                                      Map<String, Double> rightParamValues,
@@ -48,7 +48,7 @@ public class CompareClient {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
-                    .body(ComparisonResponse.class);
+                    .body(ComparisonPipelineAiResponse.class);
         } catch (RestClientResponseException exception) {
             log.warn("Compare upstream error status={} body={}",
                     exception.getStatusCode(),
