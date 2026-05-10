@@ -11,7 +11,9 @@ import com.plasma.be.extract.dto.ParameterValidationRequest;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
 import com.plasma.be.extract.service.ExtractService;
 import com.plasma.be.optimize.client.OptimizeClient;
+import com.plasma.be.optimize.client.ParameterImpactClient;
 import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
+import com.plasma.be.optimize.client.dto.ParameterImpactResponse;
 import com.plasma.be.optimize.dto.OptimizeRequest;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
@@ -41,19 +43,22 @@ public class ChatWorkflowService {
     private final OptimizeClient optimizeClient;
     private final ComparisonService comparisonService;
     private final QuestionService questionService;
+    private final ParameterImpactClient parameterImpactClient;
 
     public ChatWorkflowService(ChatMessageService chatMessageService,
                                ExtractService extractService,
                                PredictClient predictClient,
                                OptimizeClient optimizeClient,
                                ComparisonService comparisonService,
-                               QuestionService questionService) {
+                               QuestionService questionService,
+                               ParameterImpactClient parameterImpactClient) {
         this.chatMessageService = chatMessageService;
         this.extractService = extractService;
         this.predictClient = predictClient;
         this.optimizeClient = optimizeClient;
         this.comparisonService = comparisonService;
         this.questionService = questionService;
+        this.parameterImpactClient = parameterImpactClient;
     }
 
     // 사용자 메시지를 저장하고 첫 번째 AI 추출 결과를 응답으로 반환한다.
@@ -244,10 +249,13 @@ public class ChatWorkflowService {
                 .stream()
                 .sorted(Comparator.comparingDouble(this::candidateEtchScore).reversed())
                 .limit(MAX_OPTIMIZATION_CANDIDATES)
-                .map(c -> new ConfirmOptimizationResponse.Candidate(
-                        (long) c.rank(),
-                        toConfirmProcessParams(c.processParams()),
-                        c.predictionResult()))
+                .map(c -> {
+                    ConfirmOptimizationResponse.ProcessParams params = toConfirmProcessParams(c.processParams());
+                    ConfirmOptimizationResponse.ParameterImpact impact =
+                            fetchParameterImpact(optimization.processType(), params);
+                    return new ConfirmOptimizationResponse.Candidate(
+                            (long) c.rank(), params, c.predictionResult(), impact);
+                })
                 .toList();
 
         return new ConfirmOptimizationResponse(current, candidates);
@@ -282,6 +290,29 @@ public class ChatWorkflowService {
             OptimizePipelineResponse.ValueWithUnit v) {
         if (v == null) return null;
         return new ConfirmOptimizationResponse.ParamValue(v.value(), v.unit());
+    }
+
+    private ConfirmOptimizationResponse.ParameterImpact fetchParameterImpact(
+            String processType, ConfirmOptimizationResponse.ProcessParams params) {
+        try {
+            ParameterImpactResponse response = parameterImpactClient.requestParameterImpact(processType, params);
+            if (response == null) return null;
+            return new ConfirmOptimizationResponse.ParameterImpact(
+                    toImpactPoints(response.pressureImpact()),
+                    toImpactPoints(response.sourcePowerImpact()),
+                    toImpactPoints(response.biasPowerImpact())
+            );
+        } catch (RestClientException e) {
+            return null;
+        }
+    }
+
+    private List<ConfirmOptimizationResponse.ImpactPoint> toImpactPoints(
+            List<ParameterImpactResponse.ImpactPoint> points) {
+        if (points == null) return List.of();
+        return points.stream()
+                .map(p -> new ConfirmOptimizationResponse.ImpactPoint(p.x(), p.y()))
+                .toList();
     }
 
     private double candidateEtchScore(OptimizePipelineResponse.OptimizationCandidate candidate) {

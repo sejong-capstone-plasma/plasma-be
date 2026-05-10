@@ -21,10 +21,21 @@ public record ConfirmOptimizationResponse(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Candidate(
-            @JsonProperty("candidate_id") Long candidateId,
-            @JsonProperty("process_params") ProcessParams processParams,
-            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult
+            @JsonProperty("candidate_id")     Long candidateId,
+            @JsonProperty("process_params")   ProcessParams processParams,
+            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult,
+            @JsonProperty("parameter_impact") ParameterImpact parameterImpact
     ) {
+    }
+
+    public record ParameterImpact(
+            List<ImpactPoint> pressure,
+            @JsonProperty("source_power") List<ImpactPoint> sourcePower,
+            @JsonProperty("bias_power")   List<ImpactPoint> biasPower
+    ) {
+    }
+
+    public record ImpactPoint(double x, double y) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
