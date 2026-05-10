@@ -54,6 +54,9 @@ public class PlasmaDistributionService {
     private List<Double> parseJsonArray(String json) {
         if (json == null || json.isBlank()) return List.of();
         String trimmed = json.trim();
+        if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+            trimmed = trimmed.substring(1, trimmed.length() - 1);
+        }
         if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
             log.warn("Unexpected JSON array format: {}", trimmed.length() > 100 ? trimmed.substring(0, 100) : trimmed);
             return List.of();
