@@ -35,6 +35,10 @@ public class PlasmaDistributionService {
     }
 
     public PlasmaDistributionResponse toResponse(PlasmaDistribution entity) {
+        log.info("iedValues raw: {}", entity.getIedValues() == null ? "NULL" :
+                entity.getIedValues().length() + " chars, starts: " + entity.getIedValues().substring(0, Math.min(30, entity.getIedValues().length())));
+        log.info("iadValues raw: {}", entity.getIadValues() == null ? "NULL" :
+                entity.getIadValues().length() + " chars");
         return new PlasmaDistributionResponse(
                 entity.getPrs(),
                 entity.getSourcePower(),
