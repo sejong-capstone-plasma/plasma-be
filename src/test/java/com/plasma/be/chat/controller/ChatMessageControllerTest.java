@@ -11,6 +11,9 @@ import com.plasma.be.optimize.client.OptimizeClient;
 import com.plasma.be.optimize.client.ParameterImpactClient;
 import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
 import com.plasma.be.optimize.client.dto.ParameterImpactResponse;
+import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
+import com.plasma.be.plasma.entity.PlasmaDistribution;
+import com.plasma.be.plasma.service.PlasmaDistributionService;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.question.client.QuestionClient;
@@ -26,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -70,6 +74,9 @@ class ChatMessageControllerTest {
     @MockitoBean
     private ParameterImpactClient parameterImpactClient;
 
+    @MockitoBean
+    private PlasmaDistributionService plasmaDistributionService;
+
     @BeforeEach
     void setUp() {
         snapshotRepository.deleteAll();
@@ -82,6 +89,9 @@ class ChatMessageControllerTest {
                 .thenReturn(validComparisonResponse());
         when(questionClient.requestAnswer(anyString(), any())).thenReturn(aiQuestionAnswerResponse());
         when(parameterImpactClient.requestParameterImpact(any(), any())).thenReturn(validParameterImpactResponse());
+        when(plasmaDistributionService.findClosest(anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(java.util.Optional.of(validPlasmaDistribution()));
+        when(plasmaDistributionService.toResponse(any(PlasmaDistribution.class))).thenReturn(validPlasmaDistributionResponse());
     }
 
     @Test
@@ -235,6 +245,8 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.prediction.prediction_result.ion_flux.value").value(1.23))
+                .andExpect(jsonPath("$.plasmaDistribution.matched_pressure").value(10.0))
+                .andExpect(jsonPath("$.plasmaDistribution.matched_source_power").value(500.0))
                 .andExpect(jsonPath("$.validation.prediction.prediction_result.etch_score.value").value(7.89));
 
         mockMvc.perform(get("/api/chat/messages/sessions/session-001").session(browserSession))
@@ -275,6 +287,7 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.plasmaDistribution.ion_flux").value(2.34))
                 .andExpect(jsonPath("$.optimization").isEmpty());
     }
 
@@ -311,9 +324,11 @@ class ChatMessageControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(10.0))
                 .andExpect(jsonPath("$.optimization.current.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.optimization.current.plasmaDistribution.matched_bias_power").value(100.0))
                 .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
                 .andExpect(jsonPath("$.optimization.candidates[0].prediction_result.etch_score.value").value(9.1))
+                .andExpect(jsonPath("$.optimization.candidates[0].plasmaDistribution.avg_energy").value(45.6))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
 
@@ -509,7 +524,8 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
-                .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89));
+                .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.plasmaDistribution.matched_pressure").value(10.0));
 
         verify(predictClient).requestPredictPipeline(eq("ETCH"), any(), any(), anyString());
     }
@@ -547,6 +563,7 @@ class ChatMessageControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
                 .andExpect(jsonPath("$.optimization.current.process_params.source_power.value").value(500.0))
+                .andExpect(jsonPath("$.optimization.current.plasmaDistribution.matched_source_power").value(500.0))
                 .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
@@ -577,7 +594,9 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.optimization.current.process_params.bias_power.value").value(100.0))
+                .andExpect(jsonPath("$.optimization.current.plasmaDistribution.matched_pressure").value(10.0))
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
+                .andExpect(jsonPath("$.optimization.candidates[0].plasmaDistribution.ion_flux").value(2.34))
                 .andExpect(jsonPath("$.optimization.candidates[2].candidate_id").value(1))
                 .andExpect(jsonPath("$.prediction").isEmpty())
                 .andExpect(jsonPath("$.comparison").isEmpty());
@@ -1298,5 +1317,23 @@ class ChatMessageControllerTest {
     private ParameterImpactResponse validParameterImpactResponse() {
         var points = java.util.List.of(new ParameterImpactResponse.ImpactPoint(10.0, 7.5));
         return new ParameterImpactResponse("pi-001", "ETCH", points, points, points);
+    }
+
+    private PlasmaDistribution validPlasmaDistribution() {
+        return PlasmaDistribution.create(
+                10.0, 500.0, 100.0,
+                2.34, 45.6, 7.8,
+                "[1.0, 2.0, 3.0]",
+                "[0.1, 0.2, 0.3]"
+        );
+    }
+
+    private PlasmaDistributionResponse validPlasmaDistributionResponse() {
+        return new PlasmaDistributionResponse(
+                10.0, 500.0, 100.0,
+                2.34, 45.6, 7.8,
+                java.util.List.of(1.0, 2.0, 3.0),
+                java.util.List.of(0.1, 0.2, 0.3)
+        );
     }
 }

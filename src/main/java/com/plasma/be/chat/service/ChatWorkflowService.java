@@ -15,11 +15,15 @@ import com.plasma.be.optimize.client.ParameterImpactClient;
 import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
 import com.plasma.be.optimize.client.dto.ParameterImpactResponse;
 import com.plasma.be.optimize.dto.OptimizeRequest;
+import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
+import com.plasma.be.plasma.service.PlasmaDistributionService;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.chat.dto.ConfirmResponse;
 import com.plasma.be.question.client.dto.QuestionAnswerResponse;
 import com.plasma.be.question.service.QuestionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientException;
@@ -36,6 +40,7 @@ import java.util.stream.Collectors;
 public class ChatWorkflowService {
 
     private static final int MAX_OPTIMIZATION_CANDIDATES = 3;
+    private static final Logger log = LoggerFactory.getLogger(ChatWorkflowService.class);
 
     private final ChatMessageService chatMessageService;
     private final ExtractService extractService;
@@ -44,6 +49,7 @@ public class ChatWorkflowService {
     private final ComparisonService comparisonService;
     private final QuestionService questionService;
     private final ParameterImpactClient parameterImpactClient;
+    private final PlasmaDistributionService plasmaDistributionService;
 
     public ChatWorkflowService(ChatMessageService chatMessageService,
                                ExtractService extractService,
@@ -51,7 +57,8 @@ public class ChatWorkflowService {
                                OptimizeClient optimizeClient,
                                ComparisonService comparisonService,
                                QuestionService questionService,
-                               ParameterImpactClient parameterImpactClient) {
+                               ParameterImpactClient parameterImpactClient,
+                               PlasmaDistributionService plasmaDistributionService) {
         this.chatMessageService = chatMessageService;
         this.extractService = extractService;
         this.predictClient = predictClient;
@@ -59,6 +66,7 @@ public class ChatWorkflowService {
         this.comparisonService = comparisonService;
         this.questionService = questionService;
         this.parameterImpactClient = parameterImpactClient;
+        this.plasmaDistributionService = plasmaDistributionService;
     }
 
     // 사용자 메시지를 저장하고 첫 번째 AI 추출 결과를 응답으로 반환한다.
@@ -107,9 +115,9 @@ public class ChatWorkflowService {
         if ("COMPARISON".equals(taskType)) {
             try {
                 ComparisonResponse comparison = comparisonService.compare(message, validation);
-                return new ConfirmResponse(validation, null, null, comparison, null, null, null);
+                return new ConfirmResponse(validation, null, null, null, comparison, null, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
             }
         }
         if ("OPTIMIZATION".equals(taskType)) {
@@ -118,38 +126,39 @@ public class ChatWorkflowService {
                 OptimizePipelineResponse optimizeResult = runOptimizePipeline(message, validation);
                 ConfirmOptimizationResponse optimization = toConfirmOptimizationResponse(
                         optimizeResult, validation, currentPrediction);
-                return new ConfirmResponse(validation, null, optimization, null, null, null, null);
+                return new ConfirmResponse(validation, null, null, optimization, null, null, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
             }
         }
         if ("QUESTION".equals(taskType)) {
             try {
                 QuestionAnswerResponse question = questionService.answer(message);
-                return new ConfirmResponse(validation, null, null, null, question, null, null);
+                return new ConfirmResponse(validation, null, null, null, null, question, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
             }
         }
         if ("UNSUPPORTED".equals(taskType)) {
-            return new ConfirmResponse(validation, null, null, null, null, null, null);
+            return new ConfirmResponse(validation, null, null, null, null, null, null, null);
         }
         if (!StringUtils.hasText(taskType)) {
             throw new IllegalArgumentException("requestedTaskType is required when taskType is not inferred.");
         }
         if (!"PREDICTION".equals(taskType)) {
-            return new ConfirmResponse(validation, null, null, null, null, null, null);
+            return new ConfirmResponse(validation, null, null, null, null, null, null, null);
         }
 
         try {
             PredictPipelineResponse prediction = runPredictPipeline(message, validation);
+            PlasmaDistributionResponse plasmaDistribution = fetchPlasmaDistribution(validation);
             ParameterValidationResponse updatedValidation =
                     extractService.storePredictionOutcome(messageId, validationId, prediction, null);
-            return new ConfirmResponse(updatedValidation, prediction, null, null, null, null, null);
+            return new ConfirmResponse(updatedValidation, prediction, plasmaDistribution, null, null, null, null, null);
         } catch (RestClientException e) {
             ParameterValidationResponse updatedValidation =
                     extractService.storePredictionOutcome(messageId, validationId, null, e.getMessage());
-            return new ConfirmResponse(updatedValidation, null, null, null, null, e.getMessage(), e.getMessage());
+            return new ConfirmResponse(updatedValidation, null, null, null, null, null, e.getMessage(), e.getMessage());
         }
     }
 
@@ -240,7 +249,8 @@ public class ChatWorkflowService {
 
         ConfirmOptimizationResponse.Current current = new ConfirmOptimizationResponse.Current(
                 buildProcessParams(validation),
-                currentPrediction != null ? currentPrediction.predictionResult() : null
+                currentPrediction != null ? currentPrediction.predictionResult() : null,
+                fetchPlasmaDistribution(validation)
         );
 
         List<ConfirmOptimizationResponse.Candidate> candidates = optimization
@@ -254,7 +264,7 @@ public class ChatWorkflowService {
                     ConfirmOptimizationResponse.ParameterImpact impact =
                             fetchParameterImpact(optimization.processType(), params);
                     return new ConfirmOptimizationResponse.Candidate(
-                            (long) c.rank(), params, c.predictionResult(), impact);
+                            (long) c.rank(), params, c.predictionResult(), impact, fetchPlasmaDistribution(params));
                 })
                 .toList();
 
@@ -290,6 +300,57 @@ public class ChatWorkflowService {
             OptimizePipelineResponse.ValueWithUnit v) {
         if (v == null) return null;
         return new ConfirmOptimizationResponse.ParamValue(v.value(), v.unit());
+    }
+
+    private PlasmaDistributionResponse fetchPlasmaDistribution(ParameterValidationResponse validation) {
+        if (validation == null || validation.parameters() == null) {
+            return null;
+        }
+
+        Map<String, ParameterFieldResponse> paramMap = validation.parameters().stream()
+                .collect(Collectors.toMap(ParameterFieldResponse::key, Function.identity(), (left, right) -> right));
+        return fetchPlasmaDistribution(
+                valueOf(paramMap.get("pressure")),
+                valueOf(paramMap.get("source_power")),
+                valueOf(paramMap.get("bias_power"))
+        );
+    }
+
+    private PlasmaDistributionResponse fetchPlasmaDistribution(ConfirmOptimizationResponse.ProcessParams params) {
+        if (params == null) {
+            return null;
+        }
+        return fetchPlasmaDistribution(
+                valueOf(params.pressure()),
+                valueOf(params.sourcePower()),
+                valueOf(params.biasPower())
+        );
+    }
+
+    private PlasmaDistributionResponse fetchPlasmaDistribution(Double pressure,
+                                                               Double sourcePower,
+                                                               Double biasPower) {
+        if (pressure == null || sourcePower == null || biasPower == null) {
+            return null;
+        }
+
+        try {
+            return plasmaDistributionService.findClosest(pressure, sourcePower, biasPower)
+                    .map(plasmaDistributionService::toResponse)
+                    .orElse(null);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to load plasma distribution for pressure={}, sourcePower={}, biasPower={}",
+                    pressure, sourcePower, biasPower, exception);
+            return null;
+        }
+    }
+
+    private Double valueOf(ParameterFieldResponse field) {
+        return field == null ? null : field.value();
+    }
+
+    private Double valueOf(ConfirmOptimizationResponse.ParamValue field) {
+        return field == null ? null : field.value();
     }
 
     private ConfirmOptimizationResponse.ParameterImpact fetchParameterImpact(

@@ -2,6 +2,7 @@ package com.plasma.be.chat.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 
 import java.util.List;
@@ -15,7 +16,8 @@ public record ConfirmOptimizationResponse(
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Current(
             @JsonProperty("process_params") ProcessParams processParams,
-            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult
+            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult,
+            PlasmaDistributionResponse plasmaDistribution
     ) {
     }
 
@@ -24,7 +26,8 @@ public record ConfirmOptimizationResponse(
             @JsonProperty("candidate_id")     Long candidateId,
             @JsonProperty("process_params")   ProcessParams processParams,
             @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult,
-            @JsonProperty("parameter_impact") ParameterImpact parameterImpact
+            @JsonProperty("parameter_impact") ParameterImpact parameterImpact,
+            PlasmaDistributionResponse plasmaDistribution
     ) {
     }
 
