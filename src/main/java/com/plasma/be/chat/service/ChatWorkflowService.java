@@ -180,8 +180,8 @@ public class ChatWorkflowService {
 
         ParameterValidationRequest correction = new ParameterValidationRequest(
                 request.parameters(),
-                request.conditionA(),
-                request.conditionB()
+                request.normalizedConditionA(),
+                request.normalizedConditionB()
         );
         return extractService.validateCorrection(messageId, correction);
     }
