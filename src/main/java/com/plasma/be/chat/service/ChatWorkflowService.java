@@ -1,8 +1,10 @@
 package com.plasma.be.chat.service;
 
-import com.plasma.be.chat.dto.ConfirmOptimizationResponse;
 import com.plasma.be.chat.dto.ChatMessageCreateRequest;
 import com.plasma.be.chat.dto.ChatMessageSummaryResponse;
+import com.plasma.be.chat.dto.ConfirmOptimizationResponse;
+import com.plasma.be.chat.dto.ConfirmRequest;
+import com.plasma.be.chat.dto.ConfirmResponse;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.compare.dto.ComparisonResponse;
 import com.plasma.be.compare.service.ComparisonService;
@@ -19,7 +21,6 @@ import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
 import com.plasma.be.plasma.service.PlasmaDistributionService;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
-import com.plasma.be.chat.dto.ConfirmResponse;
 import com.plasma.be.question.client.dto.QuestionAnswerResponse;
 import com.plasma.be.question.service.QuestionService;
 import org.slf4j.Logger;
@@ -106,9 +107,12 @@ public class ChatWorkflowService {
     public ConfirmResponse confirmValidation(Long messageId,
                                              Long validationId,
                                              String ownerSessionKey,
-                                             String requestedTaskType) {
+                                             ConfirmRequest request) {
         ChatMessage message = chatMessageService.findOwnedMessage(messageId, ownerSessionKey);
-        ParameterValidationResponse validation = extractService.confirmValidation(messageId, validationId)
+        ParameterValidationResponse validation = resolveValidationForConfirm(messageId, validationId, request);
+        String requestedTaskType = request == null ? null : request.requestedTaskType();
+
+        validation = extractService.confirmValidation(messageId, validation.validationId())
                 .orElseThrow(() -> new NoSuchElementException("validationId is not associated with the message."));
 
         String taskType = resolveTaskType(validation.taskType(), requestedTaskType);
@@ -160,6 +164,26 @@ public class ChatWorkflowService {
                     extractService.storePredictionOutcome(messageId, validationId, null, e.getMessage());
             return new ConfirmResponse(updatedValidation, null, null, null, null, null, e.getMessage(), e.getMessage());
         }
+    }
+
+    private ParameterValidationResponse resolveValidationForConfirm(Long messageId,
+                                                                   Long validationId,
+                                                                   ConfirmRequest request) {
+        ParameterValidationResponse validation = extractService.findValidation(messageId, validationId)
+                .orElseThrow(() -> new NoSuchElementException("validationId is not associated with the message."));
+
+        String requestedTaskType = request == null ? null : request.requestedTaskType();
+        String taskType = resolveTaskType(validation.taskType(), requestedTaskType);
+        if (!"COMPARISON".equals(taskType) || request == null || !request.hasComparisonOverrides()) {
+            return validation;
+        }
+
+        ParameterValidationRequest correction = new ParameterValidationRequest(
+                request.parameters(),
+                request.conditionA(),
+                request.conditionB()
+        );
+        return extractService.validateCorrection(messageId, correction);
     }
 
     private String resolveTaskType(String inferredTaskType, String requestedTaskType) {

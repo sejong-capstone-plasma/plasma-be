@@ -62,7 +62,7 @@ public class ChatMessageController implements ChatMessageApi {
                 messageId,
                 validationId,
                 browserSession.getId(),
-                request == null ? null : request.requestedTaskType()
+                request
         );
         return ResponseEntity.ok(response);
     }

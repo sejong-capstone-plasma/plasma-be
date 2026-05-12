@@ -129,7 +129,8 @@ public interface ChatMessageApi {
 
     @Operation(summary = "검증 결과 확정 및 후속 실행",
             description = "모든 파라미터가 VALID인 검증 결과를 최종 확정합니다. "
-                    + "task_type이 있으면 해당 태스크를 실행하고, 없으면 requestedTaskType으로 예측/최적화를 선택할 수 있습니다.")
+                    + "task_type이 있으면 해당 태스크를 실행하고, 없으면 requestedTaskType으로 예측/최적화를 선택할 수 있습니다. "
+                    + "COMPARISON은 confirm 요청에서 conditionA/conditionB 보정값을 함께 받아 즉시 비교할 수 있습니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "확정 성공 (prediction 필드는 PREDICTION 태스크일 때만 채워짐)"),
             @ApiResponse(responseCode = "400", description = "아직 모든 값이 VALID가 아님"),
@@ -146,7 +147,19 @@ public interface ChatMessageApi {
                             schema = @Schema(implementation = ConfirmRequest.class),
                             examples = @ExampleObject(value = """
                                     {
-                                      "requestedTaskType": "PREDICTION"
+                                      "requestedTaskType": "COMPARISON",
+                                      "conditionA": {
+                                        "parameters": [
+                                          { "key": "source_power", "value": 500.0, "unit": "W" },
+                                          { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                        ]
+                                      },
+                                      "conditionB": {
+                                        "parameters": [
+                                          { "key": "source_power", "value": 500.0, "unit": "W" },
+                                          { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                        ]
+                                      }
                                     }
                                     """))
             )

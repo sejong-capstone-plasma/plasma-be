@@ -201,6 +201,12 @@ public class ExtractService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public Optional<ParameterValidationResponse> findValidation(Long messageId, Long validationId) {
+        return snapshotRepository.findByValidationIdAndMessageMessageId(validationId, messageId)
+                .map(this::toResponse);
+    }
+
     // 검증 결과를 사용자가 확정한 상태로 표시한다.
     @Transactional
     public Optional<ParameterValidationResponse> confirmValidation(Long messageId, Long validationId) {

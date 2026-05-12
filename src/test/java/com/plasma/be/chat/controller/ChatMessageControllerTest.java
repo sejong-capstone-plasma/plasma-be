@@ -707,6 +707,63 @@ class ChatMessageControllerTest {
     }
 
     @Test
+    void COMPARISON_confirm에서_조건payload로_누락값을_보완할_수_있다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+                .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-confirm-payload",
+                                  "inputText": "압력 8이랑 10일 때 비교해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].validationStatus").value("INVALID_FIELD"))
+                .andExpect(jsonPath("$.validations[0].allValid").value(false))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "conditionA": {
+                                    "parameters": [
+                                      { "key": "source_power", "value": 500.0, "unit": "W" },
+                                      { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                    ]
+                                  },
+                                  "conditionB": {
+                                    "parameters": [
+                                      { "key": "source_power", "value": 500.0, "unit": "W" },
+                                      { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                    ]
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validation.sourceType").value("USER_CORRECTION"))
+                .andExpect(jsonPath("$.validation.taskType").value("COMPARISON"))
+                .andExpect(jsonPath("$.validation.allValid").value(true))
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(8.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[2].value").value(100.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(100.0));
+    }
+
+    @Test
     void COMPARISON_범위초과값은_OUT_OF_RANGE로_반환한다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(outOfRangeComparisonAiResponse());
