@@ -3,7 +3,6 @@ package com.plasma.be.plasma.service;
 import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
 import com.plasma.be.plasma.entity.PlasmaDistribution;
 import com.plasma.be.plasma.repository.PlasmaDistributionRepository;
-import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -12,7 +11,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 @Service
 public class PlasmaDistributionService {
@@ -71,31 +69,6 @@ public class PlasmaDistributionService {
             log.warn("Failed to parse JSON array element: {}", e.getMessage());
             return List.of();
         }
-    }
-
-    public PredictPipelineResponse.Graphs buildGraphs(double pressure, double sourcePower, double biasPower) {
-        return findClosest(pressure, sourcePower, biasPower)
-                .map(this::toGraphs)
-                .orElse(null);
-    }
-
-    private PredictPipelineResponse.Graphs toGraphs(PlasmaDistribution entity) {
-        List<Double> iedY = parseJsonArray(entity.getIedValues());
-        List<Double> iadY = parseJsonArray(entity.getIadValues());
-        List<Double> curY = parseJsonArray(entity.getCurValues());
-        double iedMin = entity.getIedEnergyMin() != null ? entity.getIedEnergyMin() : 0.0;
-
-        List<PredictPipelineResponse.XYPoint> ied = IntStream.range(0, iedY.size())
-                .mapToObj(i -> new PredictPipelineResponse.XYPoint(iedMin + i * 1.0, iedY.get(i)))
-                .toList();
-        List<PredictPipelineResponse.XYPoint> iad = IntStream.range(0, iadY.size())
-                .mapToObj(i -> new PredictPipelineResponse.XYPoint(-10.0 + i * 0.1, iadY.get(i)))
-                .toList();
-        List<PredictPipelineResponse.XYPoint> cur = IntStream.range(0, curY.size())
-                .mapToObj(i -> new PredictPipelineResponse.XYPoint(i / 600.0, curY.get(i)))
-                .toList();
-
-        return new PredictPipelineResponse.Graphs(cur, iad, ied);
     }
 
     private static double snapToNearest(double value, double[] grid) {

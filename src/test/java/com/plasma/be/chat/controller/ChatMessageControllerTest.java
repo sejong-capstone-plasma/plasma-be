@@ -3,12 +3,17 @@ package com.plasma.be.chat.controller;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.compare.client.CompareClient;
-import com.plasma.be.compare.dto.ComparisonResponse;
+import com.plasma.be.compare.client.dto.ComparisonPipelineAiResponse;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
 import com.plasma.be.optimize.client.OptimizeClient;
+import com.plasma.be.optimize.client.ParameterImpactClient;
 import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
+import com.plasma.be.optimize.client.dto.ParameterImpactResponse;
+import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
+import com.plasma.be.plasma.entity.PlasmaDistribution;
+import com.plasma.be.plasma.service.PlasmaDistributionService;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.question.client.QuestionClient;
@@ -24,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -65,6 +71,12 @@ class ChatMessageControllerTest {
     @MockitoBean
     private QuestionClient questionClient;
 
+    @MockitoBean
+    private ParameterImpactClient parameterImpactClient;
+
+    @MockitoBean
+    private PlasmaDistributionService plasmaDistributionService;
+
     @BeforeEach
     void setUp() {
         snapshotRepository.deleteAll();
@@ -76,6 +88,10 @@ class ChatMessageControllerTest {
         when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenReturn(validComparisonResponse());
         when(questionClient.requestAnswer(anyString(), any())).thenReturn(aiQuestionAnswerResponse());
+        when(parameterImpactClient.requestParameterImpact(any(), any())).thenReturn(validParameterImpactResponse());
+        when(plasmaDistributionService.findClosest(anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(java.util.Optional.of(validPlasmaDistribution()));
+        when(plasmaDistributionService.toResponse(any(PlasmaDistribution.class))).thenReturn(validPlasmaDistributionResponse());
     }
 
     @Test
@@ -229,6 +245,8 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.prediction.prediction_result.ion_flux.value").value(1.23))
+                .andExpect(jsonPath("$.plasmaDistribution.matched_pressure").value(10.0))
+                .andExpect(jsonPath("$.plasmaDistribution.matched_source_power").value(500.0))
                 .andExpect(jsonPath("$.validation.prediction.prediction_result.etch_score.value").value(7.89));
 
         mockMvc.perform(get("/api/chat/messages/sessions/session-001").session(browserSession))
@@ -269,6 +287,7 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.plasmaDistribution.ion_flux").value(2.34))
                 .andExpect(jsonPath("$.optimization").isEmpty());
     }
 
@@ -305,9 +324,11 @@ class ChatMessageControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(10.0))
                 .andExpect(jsonPath("$.optimization.current.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.optimization.current.plasmaDistribution.matched_bias_power").value(100.0))
                 .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
                 .andExpect(jsonPath("$.optimization.candidates[0].prediction_result.etch_score.value").value(9.1))
+                .andExpect(jsonPath("$.optimization.candidates[0].plasmaDistribution.avg_energy").value(45.6))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
 
@@ -503,7 +524,8 @@ class ChatMessageControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
-                .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89));
+                .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.plasmaDistribution.matched_pressure").value(10.0));
 
         verify(predictClient).requestPredictPipeline(eq("ETCH"), any(), any(), anyString());
     }
@@ -541,6 +563,7 @@ class ChatMessageControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validation.taskType").value("UNSUPPORTED"))
                 .andExpect(jsonPath("$.optimization.current.process_params.source_power.value").value(500.0))
+                .andExpect(jsonPath("$.optimization.current.plasmaDistribution.matched_source_power").value(500.0))
                 .andExpect(jsonPath("$.optimization.candidates.length()").value(3))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
@@ -571,7 +594,9 @@ class ChatMessageControllerTest {
                         .session(browserSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.optimization.current.process_params.bias_power.value").value(100.0))
+                .andExpect(jsonPath("$.optimization.current.plasmaDistribution.matched_pressure").value(10.0))
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
+                .andExpect(jsonPath("$.optimization.candidates[0].plasmaDistribution.ion_flux").value(2.34))
                 .andExpect(jsonPath("$.optimization.candidates[2].candidate_id").value(1))
                 .andExpect(jsonPath("$.prediction").isEmpty())
                 .andExpect(jsonPath("$.comparison").isEmpty());
@@ -682,6 +707,119 @@ class ChatMessageControllerTest {
     }
 
     @Test
+    void COMPARISON_confirm에서_조건payload로_누락값을_보완할_수_있다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+                .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-confirm-payload",
+                                  "inputText": "압력 8이랑 10일 때 비교해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].validationStatus").value("INVALID_FIELD"))
+                .andExpect(jsonPath("$.validations[0].allValid").value(false))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "conditionA": {
+                                    "parameters": [
+                                      { "key": "source_power", "value": 500.0, "unit": "W" },
+                                      { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                    ]
+                                  },
+                                  "conditionB": {
+                                    "parameters": [
+                                      { "key": "source_power", "value": 500.0, "unit": "W" },
+                                      { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                    ]
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validation.sourceType").value("USER_CORRECTION"))
+                .andExpect(jsonPath("$.validation.taskType").value("COMPARISON"))
+                .andExpect(jsonPath("$.validation.allValid").value(true))
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(8.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[2].value").value(100.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(100.0));
+    }
+
+    @Test
+    void COMPARISON_confirm에서_프론트조건객체payload로_누락값을_보완할_수_있다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+                .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-compare-confirm-object-payload",
+                                  "inputText": "압력 8이랑 10일 때 비교해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].validationStatus").value("INVALID_FIELD"))
+                .andExpect(jsonPath("$.validations[0].allValid").value(false))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedTaskType": "COMPARISON",
+                                  "conditionA": {
+                                    "pressure": { "value": 8.0, "unit": "mTorr" },
+                                    "source_power": { "value": 500.0, "unit": "W" },
+                                    "bias_power": { "value": 100.0, "unit": "W" }
+                                  },
+                                  "conditionB": {
+                                    "pressure": { "value": 10.0, "unit": "mTorr" },
+                                    "source_power": { "value": 500.0, "unit": "W" },
+                                    "bias_power": { "value": 100.0, "unit": "W" }
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validation.sourceType").value("USER_CORRECTION"))
+                .andExpect(jsonPath("$.validation.taskType").value("COMPARISON"))
+                .andExpect(jsonPath("$.validation.allValid").value(true))
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(8.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[2].value").value(100.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(100.0));
+    }
+
+    @Test
     void COMPARISON_범위초과값은_OUT_OF_RANGE로_반환한다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(outOfRangeComparisonAiResponse());
@@ -754,10 +892,10 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.comparison.left.label").value("condition_a"))
+                .andExpect(jsonPath("$.comparison.left.label").value("left"))
                 .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(10.0))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
-                .andExpect(jsonPath("$.comparison.right.label").value("condition_b"))
+                .andExpect(jsonPath("$.comparison.right.label").value("right"))
                 .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
                 .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(710.0));
     }
@@ -811,9 +949,9 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.comparison.left.label").value("condition_a"))
+                .andExpect(jsonPath("$.comparison.left.label").value("left"))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(400.0))
-                .andExpect(jsonPath("$.comparison.right.label").value("condition_b"))
+                .andExpect(jsonPath("$.comparison.right.label").value("right"))
                 .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
                 .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0));
     }
@@ -1181,7 +1319,7 @@ class ChatMessageControllerTest {
         return new OptimizePipelineResponse.OptimizationCandidate(rank, processParams, predictionResult, null, etchScore);
     }
 
-    private ComparisonResponse validComparisonResponse() {
+    private ComparisonPipelineAiResponse validComparisonResponse() {
         return comparisonFromParams(
                 java.util.Map.of("pressure", 10.0, "source_power", 500.0, "bias_power", 100.0),
                 java.util.Map.of("pressure", 10.0, "source_power", 500.0, "bias_power", 200.0)
@@ -1250,48 +1388,65 @@ class ChatMessageControllerTest {
     }
 
     @SuppressWarnings("unchecked")
-    private ComparisonResponse comparisonFromParams(Object rawLeftParams, Object rawRightParams) {
+    private ComparisonPipelineAiResponse comparisonFromParams(Object rawLeftParams, Object rawRightParams) {
         java.util.Map<String, Double> leftParams = (java.util.Map<String, Double>) rawLeftParams;
         java.util.Map<String, Double> rightParams = (java.util.Map<String, Double>) rawRightParams;
 
-        PredictPipelineResponse leftPrediction = predictionFromParams(leftParams);
-        PredictPipelineResponse rightPrediction = predictionFromParams(rightParams);
-        double etchScoreDelta = rightPrediction.predictionResult().etchScore().value()
-                - leftPrediction.predictionResult().etchScore().value();
+        PredictPipelineResponse.PredictionResult leftResult = predictionResultFromParams(leftParams);
+        PredictPipelineResponse.PredictionResult rightResult = predictionResultFromParams(rightParams);
 
-        return new ComparisonResponse(
-                new ComparisonResponse.ConditionResult("left", "ETCH", java.util.List.of(), leftPrediction),
-                new ComparisonResponse.ConditionResult("right", "ETCH", java.util.List.of(), rightPrediction),
-                new ComparisonResponse.Difference(
-                        delta(leftPrediction.predictionResult().ionFlux().value(), rightPrediction.predictionResult().ionFlux().value()),
-                        "a.u.",
-                        delta(leftPrediction.predictionResult().ionEnergy().value(), rightPrediction.predictionResult().ionEnergy().value()),
-                        "eV",
-                        etchScoreDelta,
-                        "score"
-                ),
-                "비교 완료"
+        var conditionA = new ComparisonPipelineAiResponse.ConditionResult(
+                buildAiProcessParams(leftParams),
+                leftResult,
+                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+        );
+        var conditionB = new ComparisonPipelineAiResponse.ConditionResult(
+                buildAiProcessParams(rightParams),
+                rightResult,
+                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+        );
+        return new ComparisonPipelineAiResponse("cmp-dynamic", "ETCH", conditionA, conditionB);
+    }
+
+    private ComparisonPipelineAiResponse.ProcessParams buildAiProcessParams(java.util.Map<String, Double> params) {
+        return new ComparisonPipelineAiResponse.ProcessParams(
+                new ComparisonPipelineAiResponse.ValueWithUnit(params.getOrDefault("pressure", 0.0), "mTorr"),
+                new ComparisonPipelineAiResponse.ValueWithUnit(params.getOrDefault("source_power", 0.0), "W"),
+                new ComparisonPipelineAiResponse.ValueWithUnit(params.getOrDefault("bias_power", 0.0), "W")
         );
     }
 
-    private PredictPipelineResponse predictionFromParams(java.util.Map<String, Double> params) {
+    private PredictPipelineResponse.PredictionResult predictionResultFromParams(java.util.Map<String, Double> params) {
         double pressure = params.getOrDefault("pressure", 0.0);
         double sourcePower = params.getOrDefault("source_power", 0.0);
         double biasPower = params.getOrDefault("bias_power", 0.0);
-
-        return new PredictPipelineResponse(
-                "predict-dynamic",
-                "ETCH",
-                new PredictPipelineResponse.PredictionResult(
-                        new PredictPipelineResponse.ValueWithUnit(pressure, "a.u."),
-                        new PredictPipelineResponse.ValueWithUnit(sourcePower, "eV"),
-                        new PredictPipelineResponse.ValueWithUnit(pressure + sourcePower + biasPower, "score")
-                ),
-                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+        return new PredictPipelineResponse.PredictionResult(
+                new PredictPipelineResponse.ValueWithUnit(pressure, "a.u."),
+                new PredictPipelineResponse.ValueWithUnit(sourcePower, "eV"),
+                new PredictPipelineResponse.ValueWithUnit(pressure + sourcePower + biasPower, "score")
         );
     }
 
-    private double delta(double left, double right) {
-        return right - left;
+    private ParameterImpactResponse validParameterImpactResponse() {
+        var points = java.util.List.of(new ParameterImpactResponse.ImpactPoint(10.0, 7.5));
+        return new ParameterImpactResponse("pi-001", "ETCH", points, points, points);
+    }
+
+    private PlasmaDistribution validPlasmaDistribution() {
+        return PlasmaDistribution.create(
+                10.0, 500.0, 100.0,
+                2.34, 45.6, 7.8,
+                "[1.0, 2.0, 3.0]",
+                "[0.1, 0.2, 0.3]"
+        );
+    }
+
+    private PlasmaDistributionResponse validPlasmaDistributionResponse() {
+        return new PlasmaDistributionResponse(
+                10.0, 500.0, 100.0,
+                2.34, 45.6, 7.8,
+                java.util.List.of(1.0, 2.0, 3.0),
+                java.util.List.of(0.1, 0.2, 0.3)
+        );
     }
 }
