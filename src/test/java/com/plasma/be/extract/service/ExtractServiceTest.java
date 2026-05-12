@@ -571,7 +571,8 @@ class ExtractServiceTest {
                         new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
                         new PredictPipelineResponse.ValueWithUnit(7.89, "score")
                 ),
-                new PredictPipelineResponse.Explanation("summary", List.of("line-1", "line-2"))
+                new PredictPipelineResponse.Explanation("summary", List.of("line-1", "line-2")),
+                null
         );
     }
 }
