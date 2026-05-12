@@ -79,17 +79,17 @@ public class PlasmaDataSeeder implements ApplicationRunner {
         }
 
         double[][] ied = parseDistribution(iedPath);
-        double[] iadY = parseDistribution(outPath.resolve("IAD").resolve("Ar+.txt"))[1];
+        double[][] iad = parseDistribution(outPath.resolve("IAD").resolve("Ar+.txt"));
         double[] scalars = parseIonSpecies(outPath.resolve("IonSpecies.txt"));
-        double[] curY = parseDistribution(outPath.resolve("CUR").resolve("J0h_h.txt"))[1];
+        double[][] cur = parseDistribution(outPath.resolve("CUR").resolve("J0h_h.txt"));
 
         return PlasmaDistribution.create(
                 PRS_MAP.get(prsDir), SOURCE_MAP.get(srcDir), BIAS_MAP.get(biasDir),
                 scalars[0], scalars[1],
                 ied[0][0],
-                toJson(ied[1]),
-                toJson(iadY),
-                toJson(curY));
+                toJson(ied[0]), toJson(ied[1]),
+                toJson(iad[0]), toJson(iad[1]),
+                toJson(cur[0]), toJson(cur[1]));
     }
 
     // [0] = x배열, [1] = y배열

@@ -42,9 +42,12 @@ public class PlasmaDistributionService {
                 entity.getIonFlux(),
                 entity.getAvgEnergy(),
                 entity.getIedEnergyMin(),
-                parseJsonArray(entity.getIedValues()),
-                parseJsonArray(entity.getIadValues()),
-                parseJsonArray(entity.getCurValues())
+                parseJsonArray(entity.getIedXValues()),
+                parseJsonArray(entity.getIedYValues()),
+                parseJsonArray(entity.getIadXValues()),
+                parseJsonArray(entity.getIadYValues()),
+                parseJsonArray(entity.getCurXValues()),
+                parseJsonArray(entity.getCurYValues())
         );
     }
 
