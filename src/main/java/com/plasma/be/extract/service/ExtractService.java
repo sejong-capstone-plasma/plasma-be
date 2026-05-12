@@ -483,7 +483,8 @@ public class ExtractService {
                 snapshot.getPredictionRequestId(),
                 snapshot.getPredictionProcessType(),
                 predictionResult,
-                explanation
+                explanation,
+                null
         );
     }
 

@@ -13,6 +13,7 @@ import com.plasma.be.extract.service.ExtractService;
 import com.plasma.be.optimize.client.OptimizeClient;
 import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
 import com.plasma.be.optimize.dto.OptimizeRequest;
+import com.plasma.be.plasma.service.PlasmaDistributionService;
 import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.chat.dto.ConfirmResponse;
@@ -41,19 +42,22 @@ public class ChatWorkflowService {
     private final OptimizeClient optimizeClient;
     private final ComparisonService comparisonService;
     private final QuestionService questionService;
+    private final PlasmaDistributionService plasmaDistributionService;
 
     public ChatWorkflowService(ChatMessageService chatMessageService,
                                ExtractService extractService,
                                PredictClient predictClient,
                                OptimizeClient optimizeClient,
                                ComparisonService comparisonService,
-                               QuestionService questionService) {
+                               QuestionService questionService,
+                               PlasmaDistributionService plasmaDistributionService) {
         this.chatMessageService = chatMessageService;
         this.extractService = extractService;
         this.predictClient = predictClient;
         this.optimizeClient = optimizeClient;
         this.comparisonService = comparisonService;
         this.questionService = questionService;
+        this.plasmaDistributionService = plasmaDistributionService;
     }
 
     // 사용자 메시지를 저장하고 첫 번째 AI 추출 결과를 응답으로 반환한다.
@@ -138,6 +142,8 @@ public class ChatWorkflowService {
 
         try {
             PredictPipelineResponse prediction = runPredictPipeline(message, validation);
+            PredictPipelineResponse.Graphs graphs = buildGraphsFromValidation(validation);
+            prediction = prediction.withGraphs(graphs);
             ParameterValidationResponse updatedValidation =
                     extractService.storePredictionOutcome(messageId, validationId, prediction, null);
             return new ConfirmResponse(updatedValidation, prediction, null, null, null, null, null);
@@ -233,9 +239,11 @@ public class ChatWorkflowService {
             return null;
         }
 
+        ConfirmOptimizationResponse.ProcessParams currentParams = buildProcessParams(validation);
         ConfirmOptimizationResponse.Current current = new ConfirmOptimizationResponse.Current(
-                buildProcessParams(validation),
-                currentPrediction != null ? currentPrediction.predictionResult() : null
+                currentParams,
+                currentPrediction != null ? currentPrediction.predictionResult() : null,
+                buildGraphsFromProcessParams(currentParams)
         );
 
         List<ConfirmOptimizationResponse.Candidate> candidates = optimization
@@ -244,10 +252,14 @@ public class ChatWorkflowService {
                 .stream()
                 .sorted(Comparator.comparingDouble(this::candidateEtchScore).reversed())
                 .limit(MAX_OPTIMIZATION_CANDIDATES)
-                .map(c -> new ConfirmOptimizationResponse.Candidate(
-                        (long) c.rank(),
-                        toConfirmProcessParams(c.processParams()),
-                        c.predictionResult()))
+                .map(c -> {
+                    ConfirmOptimizationResponse.ProcessParams params = toConfirmProcessParams(c.processParams());
+                    return new ConfirmOptimizationResponse.Candidate(
+                            (long) c.rank(),
+                            params,
+                            c.predictionResult(),
+                            buildGraphsFromProcessParams(params));
+                })
                 .toList();
 
         return new ConfirmOptimizationResponse(current, candidates);
@@ -282,6 +294,27 @@ public class ChatWorkflowService {
             OptimizePipelineResponse.ValueWithUnit v) {
         if (v == null) return null;
         return new ConfirmOptimizationResponse.ParamValue(v.value(), v.unit());
+    }
+
+    private PredictPipelineResponse.Graphs buildGraphsFromValidation(ParameterValidationResponse validation) {
+        Map<String, Double> params = validation.parameters().stream()
+                .filter(p -> p.value() != null)
+                .collect(Collectors.toMap(ParameterFieldResponse::key, ParameterFieldResponse::value));
+        Double pressure    = params.get("pressure");
+        Double sourcePower = params.get("source_power");
+        Double biasPower   = params.get("bias_power");
+        if (pressure == null || sourcePower == null || biasPower == null) return null;
+        return plasmaDistributionService.buildGraphs(pressure, sourcePower, biasPower);
+    }
+
+    private PredictPipelineResponse.Graphs buildGraphsFromProcessParams(
+            ConfirmOptimizationResponse.ProcessParams params) {
+        if (params == null) return null;
+        Double pressure    = params.pressure()    != null ? params.pressure().value()    : null;
+        Double sourcePower = params.sourcePower()  != null ? params.sourcePower().value()  : null;
+        Double biasPower   = params.biasPower()    != null ? params.biasPower().value()    : null;
+        if (pressure == null || sourcePower == null || biasPower == null) return null;
+        return plasmaDistributionService.buildGraphs(pressure, sourcePower, biasPower);
     }
 
     private double candidateEtchScore(OptimizePipelineResponse.OptimizationCandidate candidate) {

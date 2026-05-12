@@ -14,16 +14,18 @@ public record ConfirmOptimizationResponse(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Current(
-            @JsonProperty("process_params") ProcessParams processParams,
-            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult
+            @JsonProperty("process_params")    ProcessParams processParams,
+            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult,
+            PredictPipelineResponse.Graphs graphs
     ) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Candidate(
-            @JsonProperty("candidate_id") Long candidateId,
-            @JsonProperty("process_params") ProcessParams processParams,
-            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult
+            @JsonProperty("candidate_id")      Long candidateId,
+            @JsonProperty("process_params")    ProcessParams processParams,
+            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult,
+            PredictPipelineResponse.Graphs graphs
     ) {
     }
 

@@ -39,12 +39,16 @@ public class PlasmaDistribution {
     @Column(name = "iad_values", columnDefinition = "JSON")
     private String iadValues;
 
+    @Column(name = "cur_values", columnDefinition = "JSON")
+    private String curValues;
+
     protected PlasmaDistribution() {
     }
 
     private PlasmaDistribution(Double prs, Double sourcePower, Double biasPower,
                                 Double ionFlux, Double avgEnergy,
-                                Double iedEnergyMin, String iedValues, String iadValues) {
+                                Double iedEnergyMin, String iedValues, String iadValues,
+                                String curValues) {
         this.prs = prs;
         this.sourcePower = sourcePower;
         this.biasPower = biasPower;
@@ -53,13 +57,15 @@ public class PlasmaDistribution {
         this.iedEnergyMin = iedEnergyMin;
         this.iedValues = iedValues;
         this.iadValues = iadValues;
+        this.curValues = curValues;
     }
 
     public static PlasmaDistribution create(Double prs, Double sourcePower, Double biasPower,
                                              Double ionFlux, Double avgEnergy,
-                                             Double iedEnergyMin, String iedValues, String iadValues) {
+                                             Double iedEnergyMin, String iedValues, String iadValues,
+                                             String curValues) {
         return new PlasmaDistribution(prs, sourcePower, biasPower,
-                ionFlux, avgEnergy, iedEnergyMin, iedValues, iadValues);
+                ionFlux, avgEnergy, iedEnergyMin, iedValues, iadValues, curValues);
     }
 
     public Long getId() { return id; }
@@ -71,4 +77,5 @@ public class PlasmaDistribution {
     public Double getIedEnergyMin() { return iedEnergyMin; }
     public String getIedValues() { return iedValues; }
     public String getIadValues() { return iadValues; }
+    public String getCurValues() { return curValues; }
 }
