@@ -12,6 +12,7 @@ public record PlasmaDistributionResponse(
         @JsonProperty("avg_energy")          Double avgEnergy,
         @JsonProperty("ied_energy_min")      Double iedEnergyMin,
         @JsonProperty("ied_values")          List<Double> iedValues,
-        @JsonProperty("iad_values")          List<Double> iadValues
+        @JsonProperty("iad_values")          List<Double> iadValues,
+        @JsonProperty("cur_values")          List<Double> curValues
 ) {
 }

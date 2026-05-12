@@ -142,7 +142,8 @@ public class ComparisonService {
                 ai.requestId(),
                 ai.processType(),
                 c.predictionResult(),
-                c.explanation()
+                c.explanation(),
+                null
         );
     }
 

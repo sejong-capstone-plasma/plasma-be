@@ -19,7 +19,7 @@ public class PlasmaDistributionService {
 
     private static final double[] PRESSURE_GRID     = {2.0, 4.0, 6.0, 8.0, 10.0};
     private static final double[] SOURCE_POWER_GRID = {100.0, 200.0, 300.0, 400.0, 500.0};
-    private static final double[] BIAS_POWER_GRID   = {0.0, 200.0, 400.0, 600.0, 800.0, 1000.0};
+    private static final double[] BIAS_POWER_GRID   = {200.0, 400.0, 600.0, 800.0, 1000.0};
 
     private final PlasmaDistributionRepository repository;
 
@@ -43,7 +43,8 @@ public class PlasmaDistributionService {
                 entity.getAvgEnergy(),
                 entity.getIedEnergyMin(),
                 parseJsonArray(entity.getIedValues()),
-                parseJsonArray(entity.getIadValues())
+                parseJsonArray(entity.getIadValues()),
+                parseJsonArray(entity.getCurValues())
         );
     }
 

@@ -1164,7 +1164,8 @@ class ChatMessageControllerTest {
                         new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
                         new PredictPipelineResponse.ValueWithUnit(7.89, "score")
                 ),
-                new PredictPipelineResponse.Explanation("예측 요약", java.util.List.of("설명1", "설명2"))
+                new PredictPipelineResponse.Explanation("예측 요약", java.util.List.of("설명1", "설명2")),
+                null
         );
     }
 

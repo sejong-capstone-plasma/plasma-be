@@ -53,6 +53,10 @@ public class PlasmaDataSeeder implements ApplicationRunner {
         for (String prsDir : PRS_MAP.keySet().stream().sorted().toList()) {
             for (String srcDir : SOURCE_MAP.keySet().stream().sorted().toList()) {
                 for (String biasDir : BIAS_MAP.keySet().stream().sorted().toList()) {
+                    if (BIAS_MAP.get(biasDir) == 0.0) {
+                        log.debug("Bias=0 스킵: {}/{}/{}", prsDir, srcDir, biasDir);
+                        continue;
+                    }
                     try {
                         rows.add(processCase(prsDir, srcDir, biasDir));
                     } catch (IOException e) {
@@ -71,21 +75,21 @@ public class PlasmaDataSeeder implements ApplicationRunner {
         Path iedPath = outPath.resolve("IED").resolve("Ar+.txt");
 
         if (!Files.exists(iedPath)) {
-            return PlasmaDistribution.create(
-                    PRS_MAP.get(prsDir), SOURCE_MAP.get(srcDir), BIAS_MAP.get(biasDir),
-                    null, null, null, null, null);
+            throw new IOException("출력 파일 없음: " + iedPath);
         }
 
         double[][] ied = parseDistribution(iedPath);
         double[] iadY = parseDistribution(outPath.resolve("IAD").resolve("Ar+.txt"))[1];
         double[] scalars = parseIonSpecies(outPath.resolve("IonSpecies.txt"));
+        double[] curY = parseDistribution(outPath.resolve("CUR").resolve("J0h_h.txt"))[1];
 
         return PlasmaDistribution.create(
                 PRS_MAP.get(prsDir), SOURCE_MAP.get(srcDir), BIAS_MAP.get(biasDir),
                 scalars[0], scalars[1],
                 ied[0][0],
                 toJson(ied[1]),
-                toJson(iadY));
+                toJson(iadY),
+                toJson(curY));
     }
 
     // [0] = x배열, [1] = y배열

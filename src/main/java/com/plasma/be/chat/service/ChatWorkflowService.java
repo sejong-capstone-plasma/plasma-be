@@ -167,8 +167,8 @@ public class ChatWorkflowService {
     }
 
     private ParameterValidationResponse resolveValidationForConfirm(Long messageId,
-                                                                   Long validationId,
-                                                                   ConfirmRequest request) {
+                                                                     Long validationId,
+                                                                     ConfirmRequest request) {
         ParameterValidationResponse validation = extractService.findValidation(messageId, validationId)
                 .orElseThrow(() -> new NoSuchElementException("validationId is not associated with the message."));
 
@@ -330,7 +330,6 @@ public class ChatWorkflowService {
         if (validation == null || validation.parameters() == null) {
             return null;
         }
-
         Map<String, ParameterFieldResponse> paramMap = validation.parameters().stream()
                 .collect(Collectors.toMap(ParameterFieldResponse::key, Function.identity(), (left, right) -> right));
         return fetchPlasmaDistribution(
@@ -357,7 +356,6 @@ public class ChatWorkflowService {
         if (pressure == null || sourcePower == null || biasPower == null) {
             return null;
         }
-
         try {
             return plasmaDistributionService.findClosest(pressure, sourcePower, biasPower)
                     .map(plasmaDistributionService::toResponse)

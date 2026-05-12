@@ -15,7 +15,7 @@ public record ConfirmOptimizationResponse(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Current(
-            @JsonProperty("process_params") ProcessParams processParams,
+            @JsonProperty("process_params")    ProcessParams processParams,
             @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult,
             PlasmaDistributionResponse plasmaDistribution
     ) {
@@ -23,10 +23,10 @@ public record ConfirmOptimizationResponse(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Candidate(
-            @JsonProperty("candidate_id")     Long candidateId,
-            @JsonProperty("process_params")   ProcessParams processParams,
+            @JsonProperty("candidate_id")      Long candidateId,
+            @JsonProperty("process_params")    ProcessParams processParams,
             @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult,
-            @JsonProperty("parameter_impact") ParameterImpact parameterImpact,
+            @JsonProperty("parameter_impact")  ParameterImpact parameterImpact,
             PlasmaDistributionResponse plasmaDistribution
     ) {
     }

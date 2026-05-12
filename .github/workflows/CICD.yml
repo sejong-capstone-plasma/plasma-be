@@ -89,7 +89,7 @@ jobs:
           host: ${{ secrets.LIVE_SERVER_IP }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cat > /home/ubuntu/application-secret.yml << 'EOF'
+            cat > /home/ubuntu/application-prod.yml << 'EOF'
             ${{ secrets.APPLICATION_SECRET }}
             EOF
 
