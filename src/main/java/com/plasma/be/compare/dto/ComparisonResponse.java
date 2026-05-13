@@ -1,6 +1,7 @@
 package com.plasma.be.compare.dto;
 
 import com.plasma.be.extract.dto.ParameterFieldResponse;
+import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 
 import java.util.List;
@@ -15,7 +16,8 @@ public record ComparisonResponse(
             String label,
             String processType,
             List<ParameterFieldResponse> parameters,
-            PredictPipelineResponse prediction
+            PredictPipelineResponse prediction,
+            PlasmaDistributionResponse plasmaDistribution
     ) {
     }
 
