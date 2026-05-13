@@ -11,7 +11,11 @@ import com.plasma.be.extract.dto.ParameterFieldResponse;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
 import com.plasma.be.extract.entity.MessageValidationSnapshot;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
+import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
+import com.plasma.be.plasma.service.PlasmaDistributionService;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -34,15 +38,19 @@ public class ComparisonService {
             "source_power", "W",
             "bias_power", "W"
     );
+    private static final Logger log = LoggerFactory.getLogger(ComparisonService.class);
 
     private final MessageValidationSnapshotRepository snapshotRepository;
     private final CompareClient compareClient;
+    private final PlasmaDistributionService plasmaDistributionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ComparisonService(MessageValidationSnapshotRepository snapshotRepository,
-                             CompareClient compareClient) {
+                             CompareClient compareClient,
+                             PlasmaDistributionService plasmaDistributionService) {
         this.snapshotRepository = snapshotRepository;
         this.compareClient = compareClient;
+        this.plasmaDistributionService = plasmaDistributionService;
     }
 
     public ComparisonResponse compare(ChatMessage message, ParameterValidationResponse validation) {
@@ -128,11 +136,29 @@ public class ComparisonService {
         PredictPipelineResponse leftPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionA());
         PredictPipelineResponse rightPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionB());
         return new ComparisonResponse(
-                buildConditionResult(left, processType, leftPrediction),
-                buildConditionResult(right, processType, rightPrediction),
+                buildConditionResult(left, processType, leftPrediction, fetchPlasmaDistribution(left)),
+                buildConditionResult(right, processType, rightPrediction, fetchPlasmaDistribution(right)),
                 calculateDifference(leftPrediction, rightPrediction),
                 null
         );
+    }
+
+    private PlasmaDistributionResponse fetchPlasmaDistribution(Condition condition) {
+        Double pressure   = condition.values().get("pressure");
+        Double sourcePower = condition.values().get("source_power");
+        Double biasPower  = condition.values().get("bias_power");
+        if (pressure == null || sourcePower == null || biasPower == null) {
+            return null;
+        }
+        try {
+            return plasmaDistributionService.findClosest(pressure, sourcePower, biasPower)
+                    .map(plasmaDistributionService::toResponse)
+                    .orElse(null);
+        } catch (RuntimeException e) {
+            log.warn("Failed to fetch plasma distribution for comparison condition={} pressure={} sourcePower={} biasPower={}",
+                    condition.label(), pressure, sourcePower, biasPower, e);
+            return null;
+        }
     }
 
     private PredictPipelineResponse toPredictResponse(ComparisonPipelineAiResponse ai,
@@ -173,12 +199,14 @@ public class ComparisonService {
 
     private ComparisonResponse.ConditionResult buildConditionResult(Condition condition,
                                                                      String processType,
-                                                                     PredictPipelineResponse prediction) {
+                                                                     PredictPipelineResponse prediction,
+                                                                     PlasmaDistributionResponse plasmaDistribution) {
         return new ComparisonResponse.ConditionResult(
                 condition.label(),
                 firstNonBlank(condition.processType(), processType),
                 condition.toParameterResponses(),
-                prediction
+                prediction,
+                plasmaDistribution
         );
     }
 

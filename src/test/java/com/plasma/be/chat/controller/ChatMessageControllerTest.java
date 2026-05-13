@@ -1437,8 +1437,9 @@ class ChatMessageControllerTest {
         return PlasmaDistribution.create(
                 10.0, 500.0, 100.0,
                 2.34, 45.6, 7.8,
-                "[1.0, 2.0, 3.0]",
-                "[0.1, 0.2, 0.3]"
+                "[1.0, 2.0, 3.0]", "[0.1, 0.2, 0.3]",
+                "[1.0, 2.0, 3.0]", "[0.1, 0.2, 0.3]",
+                "[1.0, 2.0, 3.0]", "[0.1, 0.2, 0.3]"
         );
     }
 
@@ -1446,8 +1447,9 @@ class ChatMessageControllerTest {
         return new PlasmaDistributionResponse(
                 10.0, 500.0, 100.0,
                 2.34, 45.6, 7.8,
-                java.util.List.of(1.0, 2.0, 3.0),
-                java.util.List.of(0.1, 0.2, 0.3)
+                java.util.List.of(1.0, 2.0, 3.0), java.util.List.of(0.1, 0.2, 0.3),
+                java.util.List.of(1.0, 2.0, 3.0), java.util.List.of(0.1, 0.2, 0.3),
+                java.util.List.of(1.0, 2.0, 3.0), java.util.List.of(0.1, 0.2, 0.3)
         );
     }
 }
