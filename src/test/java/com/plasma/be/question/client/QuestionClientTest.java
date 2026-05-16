@@ -24,6 +24,7 @@ class QuestionClientTest {
         Map<String, Object> body = questionClient.buildBody("ion flux가 뭐야?", history);
 
         assertThat(body.get("request_id")).isNotNull();
+        assertThat(body.get("original_user_input")).isEqualTo("ion flux가 뭐야?");
         assertThat(body.get("question")).isEqualTo("ion flux가 뭐야?");
         assertThat(body.get("history")).isEqualTo(history);
     }

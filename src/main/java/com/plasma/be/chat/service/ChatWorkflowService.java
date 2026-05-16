@@ -74,23 +74,35 @@ public class ChatWorkflowService {
     public ChatMessageSummaryResponse createMessageAndExtract(ChatMessageCreateRequest request, String ownerSessionKey) {
         ChatMessage message = chatMessageService.saveMessage(request, ownerSessionKey);
         ParameterValidationResponse validation = extractService.extractFromMessage(message.getMessageId());
-        return chatMessageService.toResponse(message, List.of(validation));
+        QuestionAnswerResponse question = null;
+
+        if ("QUESTION".equals(validation.taskType())) {
+            question = questionService.answer(message);
+            extractService.confirmValidation(message.getMessageId(), validation.validationId())
+                    .orElseThrow(() -> new NoSuchElementException("validationId is not associated with the message."));
+            validation = extractService.storeQuestionOutcome(message.getMessageId(), validation.validationId(), question);
+        }
+
+        return chatMessageService.toResponse(message, List.of(validation), question);
     }
 
     // 메시지별 검증 이력을 포함한 채팅 목록을 조회한다.
     public List<ChatMessageSummaryResponse> findMessagesWithValidations(String sessionId, String ownerSessionKey) {
         List<ChatMessage> messages = chatMessageService.findMessageEntitiesBySessionId(sessionId, ownerSessionKey);
+        List<Long> messageIds = messages.stream().map(ChatMessage::getMessageId).toList();
         Map<Long, List<ParameterValidationResponse>> validationsByMessageId = extractService.findByMessageIds(
-                messages.stream().map(ChatMessage::getMessageId).toList()
+                messageIds
         ).stream().collect(Collectors.groupingBy(
                 ParameterValidationResponse::messageId,
                 Collectors.mapping(Function.identity(), Collectors.toList())
         ));
+        Map<Long, QuestionAnswerResponse> questionsByMessageId = extractService.findStoredQuestionsByMessageIds(messageIds);
 
         return messages.stream()
                 .map(message -> chatMessageService.toResponse(
                         message,
-                        validationsByMessageId.getOrDefault(message.getMessageId(), List.of())
+                        validationsByMessageId.getOrDefault(message.getMessageId(), List.of()),
+                        questionsByMessageId.get(message.getMessageId())
                 ))
                 .toList();
     }

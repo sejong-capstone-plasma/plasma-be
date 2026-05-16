@@ -1,6 +1,7 @@
 package com.plasma.be.chat.dto;
 
 import com.plasma.be.extract.dto.ParameterValidationResponse;
+import com.plasma.be.question.client.dto.QuestionAnswerResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,6 +12,7 @@ public record ChatMessageSummaryResponse(
         String role,
         String inputText,
         LocalDateTime createdAt,
-        List<ParameterValidationResponse> validations
+        List<ParameterValidationResponse> validations,
+        QuestionAnswerResponse question
 ) {
 }

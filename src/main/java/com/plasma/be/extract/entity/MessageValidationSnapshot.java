@@ -117,6 +117,18 @@ public class MessageValidationSnapshot {
     @Column(name = "prediction_error", columnDefinition = "TEXT")
     private String predictionError;
 
+    @Column(name = "question_request_id", length = 36)
+    private String questionRequestId;
+
+    @Column(name = "question_answer_text", columnDefinition = "TEXT")
+    private String questionAnswerText;
+
+    @Column(name = "question_answer_source", length = 30)
+    private String questionAnswerSource;
+
+    @Column(name = "question_references_json", columnDefinition = "TEXT")
+    private String questionReferencesJson;
+
     // 이 검증 결과가 저장된 시각이다.
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -259,6 +271,17 @@ public class MessageValidationSnapshot {
         this.predictionExplanationSummary = summary;
     }
 
+    public void storeQuestionAnswer(String requestId,
+                                    String answerText,
+                                    String answerSource,
+                                    String referencesJson) {
+        this.questionRequestId = requestId;
+        this.questionAnswerText = answerText;
+        this.questionAnswerSource = answerSource;
+        this.questionReferencesJson = referencesJson;
+        this.predictionExplanationSummary = answerText;
+    }
+
     public void storeComparisonConditions(String conditionAJson, String conditionBJson) {
         this.conditionAJson = conditionAJson;
         this.conditionBJson = conditionBJson;
@@ -338,6 +361,22 @@ public class MessageValidationSnapshot {
 
     public String getPredictionError() {
         return predictionError;
+    }
+
+    public String getQuestionRequestId() {
+        return questionRequestId;
+    }
+
+    public String getQuestionAnswerText() {
+        return questionAnswerText;
+    }
+
+    public String getQuestionAnswerSource() {
+        return questionAnswerSource;
+    }
+
+    public String getQuestionReferencesJson() {
+        return questionReferencesJson;
     }
 
     public LocalDateTime getCreatedAt() {

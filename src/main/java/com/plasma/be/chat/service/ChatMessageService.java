@@ -10,6 +10,7 @@ import com.plasma.be.chat.exception.SessionAccessDeniedException;
 import com.plasma.be.chat.repository.ChatMessageRepository;
 import com.plasma.be.chat.repository.ChatSessionRepository;
 import com.plasma.be.extract.dto.ParameterValidationResponse;
+import com.plasma.be.question.client.dto.QuestionAnswerResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -160,13 +161,20 @@ public class ChatMessageService {
 
     // 채팅 메시지와 검증 이력을 함께 응답 DTO로 변환한다.
     public ChatMessageSummaryResponse toResponse(ChatMessage message, List<ParameterValidationResponse> validations) {
+        return toResponse(message, validations, null);
+    }
+
+    public ChatMessageSummaryResponse toResponse(ChatMessage message,
+                                                 List<ParameterValidationResponse> validations,
+                                                 QuestionAnswerResponse question) {
         return new ChatMessageSummaryResponse(
                 message.getMessageId(),
                 message.getSessionId(),
                 message.getRole().name(),
                 message.getInputText(),
                 message.getCreatedAt(),
-                validations
+                validations,
+                question
         );
     }
 

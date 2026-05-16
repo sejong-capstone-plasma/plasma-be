@@ -16,6 +16,7 @@ import com.plasma.be.extract.entity.MessageValidationParam;
 import com.plasma.be.extract.entity.MessageValidationSnapshot;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
+import com.plasma.be.question.client.dto.QuestionAnswerResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -254,6 +255,47 @@ public class ExtractService {
     }
 
     @Transactional
+    public ParameterValidationResponse storeQuestionOutcome(Long messageId,
+                                                            Long validationId,
+                                                            QuestionAnswerResponse question) {
+        MessageValidationSnapshot snapshot = snapshotRepository.findByValidationIdAndMessageMessageId(validationId, messageId)
+                .orElseThrow(() -> new IllegalArgumentException("validationId is not associated with the message."));
+
+        snapshot.storeQuestionAnswer(
+                question == null ? null : sanitize(question.requestId(), null),
+                question == null ? null : sanitize(question.answerText(), null),
+                question == null ? null : sanitize(question.answerSource(), null),
+                writeStringList(question == null ? null : question.references())
+        );
+        return toResponse(snapshot);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, QuestionAnswerResponse> findStoredQuestionsByMessageIds(Collection<Long> messageIds) {
+        if (messageIds == null || messageIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, MessageValidationSnapshot> latestByMessageId = new LinkedHashMap<>();
+        for (MessageValidationSnapshot snapshot : snapshotRepository.findByMessageMessageIdInOrderByMessageMessageIdAscAttemptNoAsc(messageIds)) {
+            if (!snapshot.isConfirmed()
+                    || !"QUESTION".equals(snapshot.getTaskType())
+                    || !StringUtils.hasText(snapshot.getQuestionAnswerText())) {
+                continue;
+            }
+            latestByMessageId.put(snapshot.getMessage().getMessageId(), snapshot);
+        }
+
+        return latestByMessageId.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> buildQuestion(entry.getValue()),
+                        (left, right) -> right,
+                        LinkedHashMap::new
+                ));
+    }
+
+    @Transactional
     public ParameterValidationResponse storePredictionOutcome(Long messageId,
                                                               Long validationId,
                                                               PredictPipelineResponse prediction,
@@ -471,8 +513,7 @@ public class ExtractService {
                 && snapshot.getIonFluxValue() == null
                 && snapshot.getIonEnergyValue() == null
                 && snapshot.getEtchScoreValue() == null
-                && !StringUtils.hasText(snapshot.getPredictionExplanationSummary())
-                && !StringUtils.hasText(snapshot.getPredictionExplanationDetailsJson())) {
+                && !StringUtils.hasText(snapshot.getPredictionError())) {
             return null;
         }
 
@@ -526,10 +567,14 @@ public class ExtractService {
     }
 
     private String writeExplanationDetails(List<String> details) {
+        return writeStringList(details);
+    }
+
+    private String writeStringList(List<String> values) {
         try {
-            return objectMapper.writeValueAsString(details == null ? List.of() : details);
+            return objectMapper.writeValueAsString(values == null ? List.of() : values);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Failed to serialize prediction explanation details.", exception);
+            throw new IllegalStateException("Failed to serialize string list.", exception);
         }
     }
 
@@ -545,14 +590,30 @@ public class ExtractService {
     }
 
     private List<String> readExplanationDetails(String detailsJson) {
-        if (!StringUtils.hasText(detailsJson)) {
+        return readStringList(detailsJson);
+    }
+
+    private List<String> readStringList(String json) {
+        if (!StringUtils.hasText(json)) {
             return List.of();
         }
         try {
-            return objectMapper.readValue(detailsJson, STRING_LIST_TYPE);
+            return objectMapper.readValue(json, STRING_LIST_TYPE);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Failed to deserialize prediction explanation details.", exception);
+            throw new IllegalStateException("Failed to deserialize string list.", exception);
         }
+    }
+
+    private QuestionAnswerResponse buildQuestion(MessageValidationSnapshot snapshot) {
+        if (!StringUtils.hasText(snapshot.getQuestionAnswerText())) {
+            return null;
+        }
+        return new QuestionAnswerResponse(
+                snapshot.getQuestionRequestId(),
+                snapshot.getQuestionAnswerText(),
+                snapshot.getQuestionAnswerSource(),
+                readStringList(snapshot.getQuestionReferencesJson())
+        );
     }
 
     private ChatMessage getManagedMessage(Long messageId) {

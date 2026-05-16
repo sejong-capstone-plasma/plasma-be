@@ -957,11 +957,11 @@ class ChatMessageControllerTest {
     }
 
     @Test
-    void confirm후_QUESTION_시스템질문은_로컬응답을_반환한다() throws Exception {
+    void createMessage_QUESTION_시스템질문은_즉시응답을_반환한다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(questionAiResponse());
 
-        String body = mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -971,16 +971,7 @@ class ChatMessageControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        long messageId = JsonTestHelper.readLong(body, "messageId");
-        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
-
-        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
-                        .session(browserSession))
-                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].confirmed").value(true))
                 .andExpect(jsonPath("$.question.answerSource").value("SYSTEM"))
                 .andExpect(jsonPath("$.question.answerText").value(org.hamcrest.Matchers.containsString("별도로 강제하지 않습니다")));
 
@@ -988,11 +979,11 @@ class ChatMessageControllerTest {
     }
 
     @Test
-    void confirm후_QUESTION_일반질문은_AI응답을_반환한다() throws Exception {
+    void createMessage_QUESTION_일반질문은_AI응답을_즉시반환하고_조회에도포함된다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(questionAiResponse());
 
-        String body = mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/messages")
                         .session(browserSession)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -1002,18 +993,14 @@ class ChatMessageControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        long messageId = JsonTestHelper.readLong(body, "messageId");
-        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
-
-        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
-                        .session(browserSession))
-                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validations[0].confirmed").value(true))
                 .andExpect(jsonPath("$.question.answerSource").value("AI"))
                 .andExpect(jsonPath("$.question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-question-ai").session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].question.answerSource").value("AI"))
+                .andExpect(jsonPath("$[0].question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
 
         verify(questionClient).requestAnswer(anyString(), any());
     }

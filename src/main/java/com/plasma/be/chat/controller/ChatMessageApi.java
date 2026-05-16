@@ -69,7 +69,8 @@ public interface ChatMessageApi {
                                           "failureReason": null,
                                           "createdAt": "2026-04-18T15:30:02"
                                         }
-                                      ]
+                                      ],
+                                      "question": null
                                     }
                                     """))
             ),
