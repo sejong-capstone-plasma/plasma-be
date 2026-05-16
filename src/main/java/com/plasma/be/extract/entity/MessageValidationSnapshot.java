@@ -255,6 +255,10 @@ public class MessageValidationSnapshot {
         return failureReason;
     }
 
+    public void storeAssistantSummary(String summary) {
+        this.predictionExplanationSummary = summary;
+    }
+
     public void storeComparisonConditions(String conditionAJson, String conditionBJson) {
         this.conditionAJson = conditionAJson;
         this.conditionBJson = conditionBJson;
