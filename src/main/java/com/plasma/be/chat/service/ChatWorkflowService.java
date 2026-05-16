@@ -119,6 +119,10 @@ public class ChatWorkflowService {
         if ("COMPARISON".equals(taskType)) {
             try {
                 ComparisonResponse comparison = comparisonService.compare(message, validation);
+                String summary = buildComparisonSummary(comparison);
+                if (summary != null) {
+                    extractService.storeAssistantSummary(messageId, validation.validationId(), summary);
+                }
                 return new ConfirmResponse(validation, null, null, null, comparison, null, null, null);
             } catch (RestClientException e) {
                 return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
@@ -130,6 +134,10 @@ public class ChatWorkflowService {
                 OptimizePipelineResponse optimizeResult = runOptimizePipeline(message, validation);
                 ConfirmOptimizationResponse optimization = toConfirmOptimizationResponse(
                         optimizeResult, validation, currentPrediction);
+                String summary = buildOptimizationSummary(optimizeResult);
+                if (summary != null) {
+                    extractService.storeAssistantSummary(messageId, validation.validationId(), summary);
+                }
                 return new ConfirmResponse(validation, null, null, optimization, null, null, null, null);
             } catch (RestClientException e) {
                 return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
@@ -138,6 +146,9 @@ public class ChatWorkflowService {
         if ("QUESTION".equals(taskType)) {
             try {
                 QuestionAnswerResponse question = questionService.answer(message);
+                if (question != null && StringUtils.hasText(question.answerText())) {
+                    extractService.storeAssistantSummary(messageId, validation.validationId(), question.answerText());
+                }
                 return new ConfirmResponse(validation, null, null, null, null, question, null, null);
             } catch (RestClientException e) {
                 return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
@@ -396,6 +407,67 @@ public class ChatWorkflowService {
         return points.stream()
                 .map(p -> new ConfirmOptimizationResponse.ImpactPoint(p.x(), p.y()))
                 .toList();
+    }
+
+    private String buildOptimizationSummary(OptimizePipelineResponse result) {
+        if (result == null) {
+            return null;
+        }
+        if (result.explanation() != null && StringUtils.hasText(result.explanation().summary())) {
+            return result.explanation().summary();
+        }
+        if (result.optimizationResult() == null
+                || result.optimizationResult().optimizationCandidates() == null
+                || result.optimizationResult().optimizationCandidates().isEmpty()) {
+            return null;
+        }
+        OptimizePipelineResponse.OptimizationCandidate top = result.optimizationResult()
+                .optimizationCandidates().stream()
+                .max(Comparator.comparingDouble(this::candidateEtchScore))
+                .orElse(null);
+        if (top == null || top.processParams() == null) {
+            return null;
+        }
+        OptimizePipelineResponse.ProcessParams p = top.processParams();
+        StringBuilder sb = new StringBuilder();
+        sb.append("최적화 후보 ")
+                .append(result.optimizationResult().candidateCount())
+                .append("개가 도출됐습니다. 1순위 조건: ");
+        if (p.pressure() != null) sb.append("pressure=").append(p.pressure().value()).append(" ").append(p.pressure().unit()).append(", ");
+        if (p.sourcePower() != null) sb.append("source_power=").append(p.sourcePower().value()).append(" ").append(p.sourcePower().unit()).append(", ");
+        if (p.biasPower() != null) sb.append("bias_power=").append(p.biasPower().value()).append(" ").append(p.biasPower().unit());
+        if (top.predictionResult() != null && top.predictionResult().etchScore() != null
+                && top.predictionResult().etchScore().value() != null) {
+            sb.append(" (etch score: ").append(top.predictionResult().etchScore().value()).append(")");
+        }
+        return sb.toString();
+    }
+
+    private String buildComparisonSummary(ComparisonResponse comparison) {
+        if (comparison == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        appendConditionSummary(sb, "조건 A", comparison.left());
+        sb.append(" vs ");
+        appendConditionSummary(sb, "조건 B", comparison.right());
+        if (comparison.difference() != null && comparison.difference().etchScoreDelta() != null) {
+            sb.append(": etch score 차이 ");
+            double delta = comparison.difference().etchScoreDelta();
+            sb.append(delta >= 0 ? "+" : "").append(delta);
+        }
+        return sb.toString();
+    }
+
+    private void appendConditionSummary(StringBuilder sb, String label, ComparisonResponse.ConditionResult condition) {
+        sb.append(label).append("(");
+        if (condition != null && condition.parameters() != null) {
+            condition.parameters().forEach(p -> sb.append(p.key()).append("=").append(p.value()).append(" ").append(p.unit()).append(", "));
+            if (!condition.parameters().isEmpty()) {
+                sb.setLength(sb.length() - 2);
+            }
+        }
+        sb.append(")");
     }
 
     private double candidateEtchScore(OptimizePipelineResponse.OptimizationCandidate candidate) {

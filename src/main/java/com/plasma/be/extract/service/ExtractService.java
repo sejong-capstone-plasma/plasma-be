@@ -248,6 +248,12 @@ public class ExtractService {
     }
 
     @Transactional
+    public void storeAssistantSummary(Long messageId, Long validationId, String summary) {
+        snapshotRepository.findByValidationIdAndMessageMessageId(validationId, messageId)
+                .ifPresent(snapshot -> snapshot.storeAssistantSummary(summary));
+    }
+
+    @Transactional
     public ParameterValidationResponse storePredictionOutcome(Long messageId,
                                                               Long validationId,
                                                               PredictPipelineResponse prediction,
