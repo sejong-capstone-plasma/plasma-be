@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 
 import java.util.List;
+import java.util.Map;
 
 public record OptimizePipelineResponse(
         @JsonProperty("request_id")          String requestId,
@@ -42,5 +43,5 @@ public record OptimizePipelineResponse(
 
     public record ValueWithUnit(Double value, String unit) {}
 
-    public record Explanation(String summary, List<String> details) {}
+    public record Explanation(String summary, Map<String, Object> details) {}
 }
