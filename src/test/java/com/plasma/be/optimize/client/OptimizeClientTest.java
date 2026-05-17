@@ -4,6 +4,7 @@ import com.plasma.be.optimize.dto.OptimizeRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,7 +26,8 @@ class OptimizeClientTest {
         OptimizeRequest request = new OptimizeRequest(
                 "현재 조건에서 식각률을 더 높이도록 최적화해줘",
                 "ETCH",
-                processParams
+                processParams,
+                List.of()
         );
 
         Map<String, Object> body = optimizeClient.buildBody(request);
