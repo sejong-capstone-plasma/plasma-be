@@ -5,7 +5,6 @@ import java.util.Map;
 public record OptimizeRequest(
         String originalUserInput,
         String processType,
-        Map<String, Object> processParams,
-        Map<String, Object> currentOutputs
+        Map<String, Object> processParams
 ) {
 }

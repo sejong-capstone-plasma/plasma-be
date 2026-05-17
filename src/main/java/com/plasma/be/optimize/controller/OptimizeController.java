@@ -40,9 +40,6 @@ public class OptimizeController implements OptimizeApi {
         if (request.processParams() == null || request.processParams().isEmpty()) {
             throw new IllegalArgumentException("processParams must be a non-empty object.");
         }
-        if (request.currentOutputs() != null && request.currentOutputs().isEmpty()) {
-            throw new IllegalArgumentException("currentOutputs must be an object.");
-        }
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -267,21 +267,10 @@ public class ChatWorkflowService {
             ));
         }
 
-        Map<String, Object> currentOutputs = null;
-        if (validation.currentEr() != null && validation.currentEr().value() != null) {
-            currentOutputs = Map.of(
-                    "etch_rate", Map.of(
-                            "value", validation.currentEr().value(),
-                            "unit", validation.currentEr().unit() == null ? "" : validation.currentEr().unit()
-                    )
-            );
-        }
-
         return optimizeClient.requestOptimizePipeline(new OptimizeRequest(
                 message.getInputText(),
                 validation.processType() != null ? validation.processType() : "ETCH",
-                processParams,
-                currentOutputs
+                processParams
         ));
     }
 
