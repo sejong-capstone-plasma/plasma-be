@@ -135,11 +135,12 @@ public class ComparisonService {
                                              String processType) {
         PredictPipelineResponse leftPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionA());
         PredictPipelineResponse rightPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionB());
+        String summary = (ai != null && ai.explanation() != null) ? ai.explanation().summary() : null;
         return new ComparisonResponse(
                 buildConditionResult(left, processType, leftPrediction, fetchPlasmaDistribution(left)),
                 buildConditionResult(right, processType, rightPrediction, fetchPlasmaDistribution(right)),
                 calculateDifference(leftPrediction, rightPrediction),
-                null
+                summary
         );
     }
 
@@ -168,7 +169,7 @@ public class ComparisonService {
                 ai.requestId(),
                 ai.processType(),
                 c.predictionResult(),
-                c.explanation(),
+                null,
                 null
         );
     }

@@ -21,15 +21,11 @@ class OptimizeClientTest {
                 "source_power", Map.of("value", 800.0, "unit", "W"),
                 "bias_power", Map.of("value", 100.0, "unit", "W")
         );
-        Map<String, Object> currentOutputs = Map.of(
-                "etch_rate", Map.of("value", 120.0, "unit", "nm/min")
-        );
 
         OptimizeRequest request = new OptimizeRequest(
                 "현재 조건에서 식각률을 더 높이도록 최적화해줘",
                 "ETCH",
-                processParams,
-                currentOutputs
+                processParams
         );
 
         Map<String, Object> body = optimizeClient.buildBody(request);
@@ -38,7 +34,6 @@ class OptimizeClientTest {
         assertThat(body.get("original_user_input")).isEqualTo("현재 조건에서 식각률을 더 높이도록 최적화해줘");
         assertThat(body.get("process_type")).isEqualTo("ETCH");
         assertThat(((Map<?, ?>) ((Map<?, ?>) body.get("process_params")).get("pressure")).get("value")).isEqualTo(50.0);
-        assertThat(((Map<?, ?>) ((Map<?, ?>) body.get("current_outputs")).get("etch_rate")).get("unit")).isEqualTo("nm/min");
-        assertThat(body).doesNotContainKey("target_outputs");
+        assertThat(body).doesNotContainKey("current_outputs");
     }
 }

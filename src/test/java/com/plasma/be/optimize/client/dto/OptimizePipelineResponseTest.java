@@ -39,7 +39,7 @@ class OptimizePipelineResponseTest {
                       }
                     ]
                   },
-                  "explanation": { "summary": "최적화 완료", "details": ["상세1"] }
+                  "explanation": { "summary": "최적화 완료", "details": { "interpretation": "상세1" } }
                 }
                 """, OptimizePipelineResponse.class);
 

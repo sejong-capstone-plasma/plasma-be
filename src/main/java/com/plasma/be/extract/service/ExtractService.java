@@ -51,6 +51,7 @@ public class ExtractService {
     private static final String DEFAULT_TASK_TYPE = "UNSUPPORTED";
     private static final List<String> EMPTY_TEXT_MARKERS = List.of("无", "none", "null", "n/a", "na");
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final ExtractClient extractClient;
     private final ChatMessageRepository chatMessageRepository;
@@ -566,8 +567,12 @@ public class ExtractService {
         return valueWithUnit == null ? null : sanitize(valueWithUnit.unit(), null);
     }
 
-    private String writeExplanationDetails(List<String> details) {
-        return writeStringList(details);
+    private String writeExplanationDetails(Map<String, Object> details) {
+        try {
+            return objectMapper.writeValueAsString(details == null ? Map.of() : details);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize explanation details.", exception);
+        }
     }
 
     private String writeStringList(List<String> values) {
@@ -589,8 +594,15 @@ public class ExtractService {
         }
     }
 
-    private List<String> readExplanationDetails(String detailsJson) {
-        return readStringList(detailsJson);
+    private Map<String, Object> readExplanationDetails(String detailsJson) {
+        if (!StringUtils.hasText(detailsJson)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(detailsJson, MAP_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to deserialize explanation details.", exception);
+        }
     }
 
     private List<String> readStringList(String json) {

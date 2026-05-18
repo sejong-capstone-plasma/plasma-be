@@ -1151,7 +1151,7 @@ class ChatMessageControllerTest {
                         new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
                         new PredictPipelineResponse.ValueWithUnit(7.89, "score")
                 ),
-                new PredictPipelineResponse.Explanation("예측 요약", java.util.List.of("설명1", "설명2")),
+                new PredictPipelineResponse.Explanation("예측 요약", java.util.Map.of()),
                 null
         );
     }
@@ -1283,7 +1283,7 @@ class ChatMessageControllerTest {
                 optimizationCandidate(4, 55.0, 780.0, 110.0, 1.1, 4.2, 6.2)
         );
         var optimizationResult = new OptimizePipelineResponse.OptimizationResult(4, candidates);
-        var explanation = new OptimizePipelineResponse.Explanation("최적화 완료", java.util.List.of());
+        var explanation = new OptimizePipelineResponse.Explanation("최적화 완료", java.util.Map.of());
         return new OptimizePipelineResponse("req-opt-001", "ETCH", baselineOutputs, optimizationResult, explanation);
     }
 
@@ -1385,15 +1385,14 @@ class ChatMessageControllerTest {
 
         var conditionA = new ComparisonPipelineAiResponse.ConditionResult(
                 buildAiProcessParams(leftParams),
-                leftResult,
-                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+                leftResult
         );
         var conditionB = new ComparisonPipelineAiResponse.ConditionResult(
                 buildAiProcessParams(rightParams),
-                rightResult,
-                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+                rightResult
         );
-        return new ComparisonPipelineAiResponse("cmp-dynamic", "ETCH", conditionA, conditionB);
+        return new ComparisonPipelineAiResponse("cmp-dynamic", "ETCH", conditionA, conditionB,
+                new PredictPipelineResponse.Explanation("비교 예측", java.util.Map.of()));
     }
 
     private ComparisonPipelineAiResponse.ProcessParams buildAiProcessParams(java.util.Map<String, Double> params) {

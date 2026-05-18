@@ -51,10 +51,6 @@ public class OptimizeClient {
         body.put("original_user_input", request.originalUserInput());
         body.put("process_type", request.processType());
         body.put("process_params", copyMapOrEmpty(request.processParams()));
-
-        if (hasMap(request.currentOutputs())) {
-            body.put("current_outputs", new LinkedHashMap<>(request.currentOutputs()));
-        }
         return body;
     }
 

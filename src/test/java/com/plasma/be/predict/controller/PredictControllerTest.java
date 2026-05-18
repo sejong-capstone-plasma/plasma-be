@@ -10,6 +10,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -40,7 +41,7 @@ class PredictControllerTest {
                                 new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
                                 new PredictPipelineResponse.ValueWithUnit(7.89, "score")
                         ),
-                        new PredictPipelineResponse.Explanation("예측 요약", List.of("line-1", "line-2")),
+                        new PredictPipelineResponse.Explanation("예측 요약", Map.of()),
                         null
                 ));
 
