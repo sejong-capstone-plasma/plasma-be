@@ -31,16 +31,14 @@ public class CompareClient {
                                                      Map<String, String> leftParamUnits,
                                                      Map<String, Double> rightParamValues,
                                                      Map<String, String> rightParamUnits,
-                                                     String originalUserInput,
-                                                     List<Map<String, String>> history) {
+                                                     String originalUserInput) {
         Map<String, Object> body = buildBody(
                 processType,
                 leftParamValues,
                 leftParamUnits,
                 rightParamValues,
                 rightParamUnits,
-                originalUserInput,
-                history
+                originalUserInput
         );
         log.info("Compare upstream request body: {}", body);
 
@@ -64,15 +62,13 @@ public class CompareClient {
                                   Map<String, String> leftParamUnits,
                                   Map<String, Double> rightParamValues,
                                   Map<String, String> rightParamUnits,
-                                  String originalUserInput,
-                                  List<Map<String, String>> history) {
+                                  String originalUserInput) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("request_id", UUID.randomUUID().toString());
         body.put("original_user_input", originalUserInput);
         body.put("process_type", processType);
         body.put("condition_a", buildCondition(leftParamValues, leftParamUnits));
         body.put("condition_b", buildCondition(rightParamValues, rightParamUnits));
-        body.put("history", history != null ? history : List.of());
         return body;
     }
 

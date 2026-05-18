@@ -324,7 +324,7 @@ public class ExtractService {
         return extractClient.requestExtraction(message, history);
     }
 
-    public List<Map<String, String>> buildHistory(ChatMessage currentMessage) {
+    private List<Map<String, String>> buildHistory(ChatMessage currentMessage) {
         String sessionId = currentMessage.getSession().getSessionId();
         Long currentMessageId = currentMessage.getMessageId();
 

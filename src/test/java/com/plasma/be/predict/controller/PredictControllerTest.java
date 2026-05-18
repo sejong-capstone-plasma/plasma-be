@@ -32,7 +32,7 @@ class PredictControllerTest {
 
     @Test
     void predictRaw_프론트용_엔드포인트로_호출할_수_있다() throws Exception {
-        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString(), any()))
+        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString()))
                 .thenReturn(new PredictPipelineResponse(
                         "predict-001",
                         "ETCH",

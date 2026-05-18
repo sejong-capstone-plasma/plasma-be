@@ -83,9 +83,9 @@ class ChatMessageControllerTest {
         chatMessageRepository.deleteAll();
         chatSessionRepository.deleteAll();
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
-        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString(), any())).thenReturn(validPredictionResponse());
+        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString())).thenReturn(validPredictionResponse());
         when(optimizeClient.requestOptimizePipeline(any())).thenReturn(validOptimizationResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenReturn(validComparisonResponse());
         when(questionClient.requestAnswer(anyString(), any())).thenReturn(aiQuestionAnswerResponse());
         when(parameterImpactClient.requestParameterImpact(any(), any())).thenReturn(validParameterImpactResponse());
@@ -527,7 +527,7 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89))
                 .andExpect(jsonPath("$.plasmaDistribution.matched_pressure").value(10.0));
 
-        verify(predictClient).requestPredictPipeline(eq("ETCH"), any(), any(), anyString(), any());
+        verify(predictClient).requestPredictPipeline(eq("ETCH"), any(), any(), anyString());
     }
 
     @Test
@@ -606,7 +606,7 @@ class ChatMessageControllerTest {
     void confirm후_COMPARISON_직접_두조건을_비교할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(directComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -645,7 +645,7 @@ class ChatMessageControllerTest {
     void COMPARISON_히스토리가_없어_조건이_불완전하면_confirm을_막고_재입력으로_완성할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -710,7 +710,7 @@ class ChatMessageControllerTest {
     void COMPARISON_confirm에서_조건payload로_누락값을_보완할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -767,7 +767,7 @@ class ChatMessageControllerTest {
     void COMPARISON_confirm에서_프론트조건객체payload로_누락값을_보완할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -846,7 +846,7 @@ class ChatMessageControllerTest {
     @Test
     void confirm후_COMPARISON_그조건과_새조건을_비교할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String baseBody = mockMvc.perform(post("/api/chat/messages")
@@ -905,7 +905,7 @@ class ChatMessageControllerTest {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any()))
                 .thenReturn(validAiResponseWithSource400(), patchedHistoryComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String baseBody = mockMvc.perform(post("/api/chat/messages")

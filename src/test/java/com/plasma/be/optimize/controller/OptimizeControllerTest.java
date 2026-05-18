@@ -10,7 +10,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,8 +44,7 @@ class OptimizeControllerTest {
         OptimizeRequest request = new OptimizeRequest(
                 "최적화해줘",
                 "ETCH",
-                Map.of(),
-                null
+                Map.of()
         );
 
         assertThatThrownBy(() -> optimizeController.optimizeRaw(request))
@@ -58,8 +56,7 @@ class OptimizeControllerTest {
         return new OptimizeRequest(
                 "최적화해줘",
                 "ETCH",
-                Map.of("pressure", Map.of("value", 50.0, "unit", "mTorr")),
-                List.of()
+                Map.of("pressure", Map.of("value", 50.0, "unit", "mTorr"))
         );
     }
 }

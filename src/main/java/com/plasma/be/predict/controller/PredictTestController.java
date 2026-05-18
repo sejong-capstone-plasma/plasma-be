@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -36,8 +35,7 @@ public class PredictTestController implements PredictTestApi {
                         "source_power", request.sourcePower().unit(),
                         "bias_power",   request.biasPower().unit()
                 ),
-                request.originalUserInput(),
-                List.of()
+                request.originalUserInput()
         );
         return ResponseEntity.ok(response);
     }

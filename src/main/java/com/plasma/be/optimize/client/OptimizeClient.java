@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -52,7 +51,6 @@ public class OptimizeClient {
         body.put("original_user_input", request.originalUserInput());
         body.put("process_type", request.processType());
         body.put("process_params", copyMapOrEmpty(request.processParams()));
-        body.put("history", request.history() != null ? request.history() : List.of());
         return body;
     }
 

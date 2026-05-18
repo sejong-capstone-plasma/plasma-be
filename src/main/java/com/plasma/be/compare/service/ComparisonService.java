@@ -53,9 +53,7 @@ public class ComparisonService {
         this.plasmaDistributionService = plasmaDistributionService;
     }
 
-    public ComparisonResponse compare(ChatMessage message,
-                                      ParameterValidationResponse validation,
-                                      List<Map<String, String>> history) {
+    public ComparisonResponse compare(ChatMessage message, ParameterValidationResponse validation) {
         ParsedComparison parsed = parseFromExtract(validation);
 
         String processType = firstNonBlank(
@@ -73,8 +71,7 @@ public class ComparisonService {
                 left.units(),
                 right.values(),
                 right.units(),
-                message.getInputText(),
-                history
+                message.getInputText()
         );
 
         return buildResponse(aiResponse, left, right, processType);
