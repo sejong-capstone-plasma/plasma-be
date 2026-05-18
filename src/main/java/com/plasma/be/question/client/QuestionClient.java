@@ -36,7 +36,6 @@ public class QuestionClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("request_id", UUID.randomUUID().toString());
         body.put("original_user_input", question);
-        body.put("question", question);
         body.put("history", history == null ? List.of() : history);
         return body;
     }

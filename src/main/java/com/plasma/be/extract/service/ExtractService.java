@@ -272,6 +272,18 @@ public class ExtractService {
     }
 
     @Transactional(readOnly = true)
+    public Optional<QuestionAnswerResponse> findStoredQuestion(Long messageId, Long validationId) {
+        Optional<MessageValidationSnapshot> snapshot = snapshotRepository.findByValidationIdAndMessageMessageId(
+                validationId,
+                messageId
+        );
+        if (snapshot.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(buildQuestion(snapshot.get()));
+    }
+
+    @Transactional(readOnly = true)
     public Map<Long, QuestionAnswerResponse> findStoredQuestionsByMessageIds(Collection<Long> messageIds) {
         if (messageIds == null || messageIds.isEmpty()) {
             return Map.of();
@@ -339,12 +351,19 @@ public class ExtractService {
             history.add(Map.of("role", "user", "content", prior.getInputText()));
 
             snapshotRepository.findByMessageMessageIdAndConfirmedTrue(prior.getMessageId()).stream()
-                    .findFirst()
-                    .map(MessageValidationSnapshot::getPredictionExplanationSummary)
+                    .max(java.util.Comparator.comparingInt(MessageValidationSnapshot::getAttemptNo))
+                    .map(this::resolveAssistantHistoryContent)
                     .filter(StringUtils::hasText)
-                    .ifPresent(summary -> history.add(Map.of("role", "assistant", "content", summary)));
+                    .ifPresent(content -> history.add(Map.of("role", "assistant", "content", content)));
         }
         return history;
+    }
+
+    private String resolveAssistantHistoryContent(MessageValidationSnapshot snapshot) {
+        if ("QUESTION".equals(snapshot.getTaskType()) && StringUtils.hasText(snapshot.getQuestionAnswerText())) {
+            return snapshot.getQuestionAnswerText();
+        }
+        return snapshot.getPredictionExplanationSummary();
     }
 
     MessageValidationSnapshot createSnapshot(ChatMessage message,

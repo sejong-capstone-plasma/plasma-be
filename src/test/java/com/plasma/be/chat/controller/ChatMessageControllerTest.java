@@ -18,6 +18,7 @@ import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.question.client.QuestionClient;
 import com.plasma.be.question.client.dto.QuestionAnswerResponse;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,11 +29,15 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -1003,6 +1008,80 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$[0].question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
 
         verify(questionClient).requestAnswer(anyString(), any());
+    }
+
+    @Test
+    void confirm_QUESTION_이미저장된답변을_재사용하고_ML을_재호출하지않는다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(questionAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-question-confirm",
+                                  "inputText": "ion flux가 뭐야?"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.question.answerSource").value("AI"))
+                .andExpect(jsonPath("$.question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-question-confirm").session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].question.answerSource").value("AI"))
+                .andExpect(jsonPath("$[0].question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
+
+        verify(questionClient, times(1)).requestAnswer(anyString(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void createMessage_QUESTION_후속질문에는_이전답변이_history에_포함된다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(questionAiResponse());
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-question-history",
+                                  "inputText": "ion flux가 뭐야?"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-question-history",
+                                  "inputText": "그럼 ion energy랑 차이는 뭐야?"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<List<Map<String, String>>> historyCaptor = ArgumentCaptor.forClass(List.class);
+        verify(questionClient, times(2)).requestAnswer(anyString(), historyCaptor.capture());
+
+        List<Map<String, String>> secondHistory = historyCaptor.getAllValues().get(1);
+        org.assertj.core.api.Assertions.assertThat(secondHistory).containsExactly(
+                Map.of("role", "user", "content", "ion flux가 뭐야?"),
+                Map.of("role", "assistant", "content", "ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다.")
+        );
     }
 
     @Test

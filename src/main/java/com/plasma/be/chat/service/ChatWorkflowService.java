@@ -157,11 +157,16 @@ public class ChatWorkflowService {
         }
         if ("QUESTION".equals(taskType)) {
             try {
-                QuestionAnswerResponse question = questionService.answer(message);
-                if (question != null && StringUtils.hasText(question.answerText())) {
-                    extractService.storeAssistantSummary(messageId, validation.validationId(), question.answerText());
+                QuestionAnswerResponse storedQuestion = extractService.findStoredQuestion(messageId, validation.validationId())
+                        .orElse(null);
+                if (storedQuestion != null) {
+                    return new ConfirmResponse(validation, null, null, null, null, storedQuestion, null, null);
                 }
-                return new ConfirmResponse(validation, null, null, null, null, question, null, null);
+
+                QuestionAnswerResponse question = questionService.answer(message);
+                ParameterValidationResponse updatedValidation =
+                        extractService.storeQuestionOutcome(messageId, validation.validationId(), question);
+                return new ConfirmResponse(updatedValidation, null, null, null, null, question, null, null);
             } catch (RestClientException e) {
                 return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
             }
