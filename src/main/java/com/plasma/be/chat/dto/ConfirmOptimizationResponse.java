@@ -2,6 +2,7 @@ package com.plasma.be.chat.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.plasma.be.optimize.client.dto.OptimizePipelineResponse;
 import com.plasma.be.plasma.dto.PlasmaDistributionResponse;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 
@@ -10,7 +11,8 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ConfirmOptimizationResponse(
         Current current,
-        List<Candidate> candidates
+        List<Candidate> candidates,
+        OptimizePipelineResponse.Explanation explanation
 ) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)

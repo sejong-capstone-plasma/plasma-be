@@ -314,7 +314,7 @@ public class ChatWorkflowService {
                 })
                 .toList();
 
-        return new ConfirmOptimizationResponse(current, candidates);
+        return new ConfirmOptimizationResponse(current, candidates, optimization.explanation());
     }
 
     private ConfirmOptimizationResponse.ProcessParams buildProcessParams(ParameterValidationResponse validation) {

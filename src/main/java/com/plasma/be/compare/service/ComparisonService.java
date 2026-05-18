@@ -143,7 +143,8 @@ public class ComparisonService {
                 buildConditionResult(left, processType, leftPrediction, fetchPlasmaDistribution(left)),
                 buildConditionResult(right, processType, rightPrediction, fetchPlasmaDistribution(right)),
                 calculateDifference(leftPrediction, rightPrediction),
-                summary
+                summary,
+                ai == null ? null : ai.explanation()
         );
     }
 

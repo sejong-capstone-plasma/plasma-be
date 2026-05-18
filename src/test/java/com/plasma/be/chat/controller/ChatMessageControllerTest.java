@@ -334,6 +334,7 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
                 .andExpect(jsonPath("$.optimization.candidates[0].prediction_result.etch_score.value").value(9.1))
                 .andExpect(jsonPath("$.optimization.candidates[0].plasmaDistribution.avg_energy").value(45.6))
+                .andExpect(jsonPath("$.optimization.explanation.summary").value("최적화 완료"))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
 
@@ -603,6 +604,7 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
                 .andExpect(jsonPath("$.optimization.candidates[0].plasmaDistribution.ion_flux").value(2.34))
                 .andExpect(jsonPath("$.optimization.candidates[2].candidate_id").value(1))
+                .andExpect(jsonPath("$.optimization.explanation.summary").value("최적화 완료"))
                 .andExpect(jsonPath("$.prediction").isEmpty())
                 .andExpect(jsonPath("$.comparison").isEmpty());
     }
@@ -643,7 +645,8 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
                 .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(6.0))
                 .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(400.0))
-                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(606.0));
+                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(606.0))
+                .andExpect(jsonPath("$.comparison.explanation.summary").value("비교 예측"));
     }
 
     @Test
@@ -958,7 +961,8 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(400.0))
                 .andExpect(jsonPath("$.comparison.right.label").value("right"))
                 .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
-                .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0));
+                .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0))
+                .andExpect(jsonPath("$.comparison.explanation.summary").value("비교 예측"));
     }
 
     @Test
