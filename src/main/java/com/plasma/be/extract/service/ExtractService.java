@@ -51,6 +51,7 @@ public class ExtractService {
     private static final String DEFAULT_TASK_TYPE = "UNSUPPORTED";
     private static final List<String> EMPTY_TEXT_MARKERS = List.of("无", "none", "null", "n/a", "na");
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
+    private static final TypeReference<List<Object>> OBJECT_LIST_TYPE = new TypeReference<>() {};
 
     private final ExtractClient extractClient;
     private final ChatMessageRepository chatMessageRepository;
@@ -265,7 +266,7 @@ public class ExtractService {
                 question == null ? null : sanitize(question.requestId(), null),
                 question == null ? null : sanitize(question.answerText(), null),
                 question == null ? null : sanitize(question.answerSource(), null),
-                writeStringList(question == null ? null : question.references())
+                writeObjectList(question == null ? null : question.references())
         );
         return toResponse(snapshot);
     }
@@ -570,6 +571,25 @@ public class ExtractService {
         return writeStringList(details);
     }
 
+    private String writeObjectList(List<Object> values) {
+        try {
+            return objectMapper.writeValueAsString(values == null ? List.of() : values);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize object list.", exception);
+        }
+    }
+
+    private List<Object> readObjectList(String json) {
+        if (!StringUtils.hasText(json)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, OBJECT_LIST_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to deserialize object list.", exception);
+        }
+    }
+
     private String writeStringList(List<String> values) {
         try {
             return objectMapper.writeValueAsString(values == null ? List.of() : values);
@@ -612,7 +632,7 @@ public class ExtractService {
                 snapshot.getQuestionRequestId(),
                 snapshot.getQuestionAnswerText(),
                 snapshot.getQuestionAnswerSource(),
-                readStringList(snapshot.getQuestionReferencesJson())
+                readObjectList(snapshot.getQuestionReferencesJson())
         );
     }
 
