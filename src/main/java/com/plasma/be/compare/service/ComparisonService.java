@@ -53,7 +53,9 @@ public class ComparisonService {
         this.plasmaDistributionService = plasmaDistributionService;
     }
 
-    public ComparisonResponse compare(ChatMessage message, ParameterValidationResponse validation) {
+    public ComparisonResponse compare(ChatMessage message,
+                                      ParameterValidationResponse validation,
+                                      List<Map<String, String>> history) {
         ParsedComparison parsed = parseFromExtract(validation);
 
         String processType = firstNonBlank(
@@ -71,7 +73,8 @@ public class ComparisonService {
                 left.units(),
                 right.values(),
                 right.units(),
-                message.getInputText()
+                message.getInputText(),
+                history
         );
 
         return buildResponse(aiResponse, left, right, processType);
@@ -135,11 +138,12 @@ public class ComparisonService {
                                              String processType) {
         PredictPipelineResponse leftPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionA());
         PredictPipelineResponse rightPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionB());
+        String summary = (ai != null && ai.explanation() != null) ? ai.explanation().summary() : null;
         return new ComparisonResponse(
                 buildConditionResult(left, processType, leftPrediction, fetchPlasmaDistribution(left)),
                 buildConditionResult(right, processType, rightPrediction, fetchPlasmaDistribution(right)),
                 calculateDifference(leftPrediction, rightPrediction),
-                null
+                summary
         );
     }
 
@@ -168,7 +172,7 @@ public class ComparisonService {
                 ai.requestId(),
                 ai.processType(),
                 c.predictionResult(),
-                c.explanation(),
+                null,
                 null
         );
     }

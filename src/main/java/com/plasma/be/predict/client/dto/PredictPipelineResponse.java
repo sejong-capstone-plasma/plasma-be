@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
+import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PredictPipelineResponse(
@@ -22,7 +23,7 @@ public record PredictPipelineResponse(
 
     public record ValueWithUnit(Double value, String unit) {}
 
-    public record Explanation(String summary, List<String> details) {}
+    public record Explanation(String summary, Map<String, Object> details) {}
 
     public record Graphs(
             List<XYPoint> cur,

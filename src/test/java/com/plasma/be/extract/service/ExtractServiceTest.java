@@ -21,6 +21,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -368,7 +369,7 @@ class ExtractServiceTest {
 
         assertThat(response.prediction()).isNotNull();
         assertThat(response.prediction().predictionResult().ionFlux().value()).isEqualTo(1.23);
-        assertThat(response.prediction().explanation().details()).containsExactly("line-1", "line-2");
+        assertThat(response.prediction().explanation().details()).containsEntry("detail1", "line-1");
         assertThat(response.predictionError()).isNull();
     }
 
@@ -571,7 +572,7 @@ class ExtractServiceTest {
                         new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
                         new PredictPipelineResponse.ValueWithUnit(7.89, "score")
                 ),
-                new PredictPipelineResponse.Explanation("summary", List.of("line-1", "line-2")),
+                new PredictPipelineResponse.Explanation("summary", Map.of("detail1", "line-1", "detail2", "line-2")),
                 null
         );
     }

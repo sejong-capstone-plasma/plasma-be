@@ -52,6 +52,7 @@ public class ExtractService {
     private static final List<String> EMPTY_TEXT_MARKERS = List.of("无", "none", "null", "n/a", "na");
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Object>> OBJECT_LIST_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final ExtractClient extractClient;
     private final ChatMessageRepository chatMessageRepository;
@@ -272,6 +273,18 @@ public class ExtractService {
     }
 
     @Transactional(readOnly = true)
+    public Optional<QuestionAnswerResponse> findStoredQuestion(Long messageId, Long validationId) {
+        Optional<MessageValidationSnapshot> snapshot = snapshotRepository.findByValidationIdAndMessageMessageId(
+                validationId,
+                messageId
+        );
+        if (snapshot.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(buildQuestion(snapshot.get()));
+    }
+
+    @Transactional(readOnly = true)
     public Map<Long, QuestionAnswerResponse> findStoredQuestionsByMessageIds(Collection<Long> messageIds) {
         if (messageIds == null || messageIds.isEmpty()) {
             return Map.of();
@@ -324,7 +337,7 @@ public class ExtractService {
         return extractClient.requestExtraction(message, history);
     }
 
-    private List<Map<String, String>> buildHistory(ChatMessage currentMessage) {
+    public List<Map<String, String>> buildHistory(ChatMessage currentMessage) {
         String sessionId = currentMessage.getSession().getSessionId();
         Long currentMessageId = currentMessage.getMessageId();
 
@@ -339,12 +352,19 @@ public class ExtractService {
             history.add(Map.of("role", "user", "content", prior.getInputText()));
 
             snapshotRepository.findByMessageMessageIdAndConfirmedTrue(prior.getMessageId()).stream()
-                    .findFirst()
-                    .map(MessageValidationSnapshot::getPredictionExplanationSummary)
+                    .max(java.util.Comparator.comparingInt(MessageValidationSnapshot::getAttemptNo))
+                    .map(this::resolveAssistantHistoryContent)
                     .filter(StringUtils::hasText)
-                    .ifPresent(summary -> history.add(Map.of("role", "assistant", "content", summary)));
+                    .ifPresent(content -> history.add(Map.of("role", "assistant", "content", content)));
         }
         return history;
+    }
+
+    private String resolveAssistantHistoryContent(MessageValidationSnapshot snapshot) {
+        if ("QUESTION".equals(snapshot.getTaskType()) && StringUtils.hasText(snapshot.getQuestionAnswerText())) {
+            return snapshot.getQuestionAnswerText();
+        }
+        return snapshot.getPredictionExplanationSummary();
     }
 
     MessageValidationSnapshot createSnapshot(ChatMessage message,
@@ -567,8 +587,12 @@ public class ExtractService {
         return valueWithUnit == null ? null : sanitize(valueWithUnit.unit(), null);
     }
 
-    private String writeExplanationDetails(List<String> details) {
-        return writeStringList(details);
+    private String writeExplanationDetails(Map<String, Object> details) {
+        try {
+            return objectMapper.writeValueAsString(details == null ? Map.of() : details);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize explanation details.", exception);
+        }
     }
 
     private String writeObjectList(List<Object> values) {
@@ -609,8 +633,15 @@ public class ExtractService {
         }
     }
 
-    private List<String> readExplanationDetails(String detailsJson) {
-        return readStringList(detailsJson);
+    private Map<String, Object> readExplanationDetails(String detailsJson) {
+        if (!StringUtils.hasText(detailsJson)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(detailsJson, MAP_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to deserialize explanation details.", exception);
+        }
     }
 
     private List<String> readStringList(String json) {

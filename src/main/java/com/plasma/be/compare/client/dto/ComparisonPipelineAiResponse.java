@@ -7,12 +7,12 @@ public record ComparisonPipelineAiResponse(
         @JsonProperty("request_id")   String requestId,
         @JsonProperty("process_type") String processType,
         @JsonProperty("condition_a")  ConditionResult conditionA,
-        @JsonProperty("condition_b")  ConditionResult conditionB
+        @JsonProperty("condition_b")  ConditionResult conditionB,
+        PredictPipelineResponse.Explanation explanation
 ) {
     public record ConditionResult(
             @JsonProperty("process_params")    ProcessParams processParams,
-            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult,
-            PredictPipelineResponse.Explanation explanation
+            @JsonProperty("prediction_result") PredictPipelineResponse.PredictionResult predictionResult
     ) {}
 
     public record ProcessParams(

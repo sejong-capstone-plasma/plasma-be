@@ -10,6 +10,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,7 +32,7 @@ class PredictControllerTest {
 
     @Test
     void predictRaw_프론트용_엔드포인트로_호출할_수_있다() throws Exception {
-        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString()))
+        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString(), any()))
                 .thenReturn(new PredictPipelineResponse(
                         "predict-001",
                         "ETCH",
@@ -40,7 +41,7 @@ class PredictControllerTest {
                                 new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
                                 new PredictPipelineResponse.ValueWithUnit(7.89, "score")
                         ),
-                        new PredictPipelineResponse.Explanation("예측 요약", List.of("line-1", "line-2")),
+                        new PredictPipelineResponse.Explanation("예측 요약", Map.of()),
                         null
                 ));
 

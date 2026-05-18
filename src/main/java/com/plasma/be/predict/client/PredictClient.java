@@ -25,8 +25,9 @@ public class PredictClient {
     public PredictPipelineResponse requestPredictPipeline(String processType,
                                                           Map<String, Double> paramValues,
                                                           Map<String, String> paramUnits,
-                                                          String originalUserInput) {
-        Map<String, Object> body = buildBody(processType, paramValues, paramUnits, originalUserInput);
+                                                          String originalUserInput,
+                                                          List<Map<String, String>> history) {
+        Map<String, Object> body = buildBody(processType, paramValues, paramUnits, originalUserInput, history);
         return httpClient.post()
                 .uri(PREDICT_PIPELINE_ENDPOINT)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -38,7 +39,8 @@ public class PredictClient {
     Map<String, Object> buildBody(String processType,
                                   Map<String, Double> paramValues,
                                   Map<String, String> paramUnits,
-                                  String originalUserInput) {
+                                  String originalUserInput,
+                                  List<Map<String, String>> history) {
         Map<String, Object> processParamsMap = new LinkedHashMap<>();
         for (String key : List.of("pressure", "source_power", "bias_power")) {
             processParamsMap.put(key, Map.of(
@@ -51,6 +53,7 @@ public class PredictClient {
         body.put("original_user_input", originalUserInput);
         body.put("process_type", processType);
         body.put("process_params", processParamsMap);
+        body.put("history", history != null ? history : List.of());
         return body;
     }
 }

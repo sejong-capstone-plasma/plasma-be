@@ -43,9 +43,6 @@ public interface OptimizeApi {
                                         "pressure": { "value": 50.0, "unit": "mTorr" },
                                         "source_power": { "value": 800.0, "unit": "W" },
                                         "bias_power": { "value": 100.0, "unit": "W" }
-                                      },
-                                      "currentOutputs": {
-                                        "etch_rate": { "value": 120.0, "unit": "nm/min" }
                                       }
                                     }
                                     """))

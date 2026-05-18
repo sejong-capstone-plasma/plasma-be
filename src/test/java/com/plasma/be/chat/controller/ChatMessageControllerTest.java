@@ -18,6 +18,7 @@ import com.plasma.be.predict.client.PredictClient;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.question.client.QuestionClient;
 import com.plasma.be.question.client.dto.QuestionAnswerResponse;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,11 +29,15 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -83,9 +88,9 @@ class ChatMessageControllerTest {
         chatMessageRepository.deleteAll();
         chatSessionRepository.deleteAll();
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
-        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString())).thenReturn(validPredictionResponse());
+        when(predictClient.requestPredictPipeline(anyString(), any(), any(), anyString(), any())).thenReturn(validPredictionResponse());
         when(optimizeClient.requestOptimizePipeline(any())).thenReturn(validOptimizationResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenReturn(validComparisonResponse());
         when(questionClient.requestAnswer(anyString(), any())).thenReturn(aiQuestionAnswerResponse());
         when(parameterImpactClient.requestParameterImpact(any(), any())).thenReturn(validParameterImpactResponse());
@@ -527,7 +532,7 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.prediction.prediction_result.etch_score.value").value(7.89))
                 .andExpect(jsonPath("$.plasmaDistribution.matched_pressure").value(10.0));
 
-        verify(predictClient).requestPredictPipeline(eq("ETCH"), any(), any(), anyString());
+        verify(predictClient).requestPredictPipeline(eq("ETCH"), any(), any(), anyString(), any());
     }
 
     @Test
@@ -606,7 +611,7 @@ class ChatMessageControllerTest {
     void confirm후_COMPARISON_직접_두조건을_비교할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(directComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -645,7 +650,7 @@ class ChatMessageControllerTest {
     void COMPARISON_히스토리가_없어_조건이_불완전하면_confirm을_막고_재입력으로_완성할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -710,7 +715,7 @@ class ChatMessageControllerTest {
     void COMPARISON_confirm에서_조건payload로_누락값을_보완할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -767,7 +772,7 @@ class ChatMessageControllerTest {
     void COMPARISON_confirm에서_프론트조건객체payload로_누락값을_보완할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(incompleteComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String body = mockMvc.perform(post("/api/chat/messages")
@@ -846,7 +851,7 @@ class ChatMessageControllerTest {
     @Test
     void confirm후_COMPARISON_그조건과_새조건을_비교할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String baseBody = mockMvc.perform(post("/api/chat/messages")
@@ -905,7 +910,7 @@ class ChatMessageControllerTest {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any()))
                 .thenReturn(validAiResponseWithSource400(), patchedHistoryComparisonAiResponse());
-        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString()))
+        when(compareClient.requestComparePipeline(anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenAnswer(invocation -> comparisonFromParams(invocation.getArgument(1), invocation.getArgument(3)));
 
         String baseBody = mockMvc.perform(post("/api/chat/messages")
@@ -1003,6 +1008,80 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$[0].question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
 
         verify(questionClient).requestAnswer(anyString(), any());
+    }
+
+    @Test
+    void confirm_QUESTION_이미저장된답변을_재사용하고_ML을_재호출하지않는다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(questionAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-question-confirm",
+                                  "inputText": "ion flux가 뭐야?"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.question.answerSource").value("AI"))
+                .andExpect(jsonPath("$.question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-question-confirm").session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].question.answerSource").value("AI"))
+                .andExpect(jsonPath("$[0].question.answerText").value("ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다."));
+
+        verify(questionClient, times(1)).requestAnswer(anyString(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void createMessage_QUESTION_후속질문에는_이전답변이_history에_포함된다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(questionAiResponse());
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-question-history",
+                                  "inputText": "ion flux가 뭐야?"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-question-history",
+                                  "inputText": "그럼 ion energy랑 차이는 뭐야?"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<List<Map<String, String>>> historyCaptor = ArgumentCaptor.forClass(List.class);
+        verify(questionClient, times(2)).requestAnswer(anyString(), historyCaptor.capture());
+
+        List<Map<String, String>> secondHistory = historyCaptor.getAllValues().get(1);
+        org.assertj.core.api.Assertions.assertThat(secondHistory).containsExactly(
+                Map.of("role", "user", "content", "ion flux가 뭐야?"),
+                Map.of("role", "assistant", "content", "ion flux는 플라즈마 내 이온의 흐름을 나타내는 지표입니다.")
+        );
     }
 
     @Test
@@ -1151,7 +1230,7 @@ class ChatMessageControllerTest {
                         new PredictPipelineResponse.ValueWithUnit(4.56, "eV"),
                         new PredictPipelineResponse.ValueWithUnit(7.89, "score")
                 ),
-                new PredictPipelineResponse.Explanation("예측 요약", java.util.List.of("설명1", "설명2")),
+                new PredictPipelineResponse.Explanation("예측 요약", java.util.Map.of()),
                 null
         );
     }
@@ -1283,7 +1362,7 @@ class ChatMessageControllerTest {
                 optimizationCandidate(4, 55.0, 780.0, 110.0, 1.1, 4.2, 6.2)
         );
         var optimizationResult = new OptimizePipelineResponse.OptimizationResult(4, candidates);
-        var explanation = new OptimizePipelineResponse.Explanation("최적화 완료", java.util.List.of());
+        var explanation = new OptimizePipelineResponse.Explanation("최적화 완료", java.util.Map.of());
         return new OptimizePipelineResponse("req-opt-001", "ETCH", baselineOutputs, optimizationResult, explanation);
     }
 
@@ -1385,15 +1464,14 @@ class ChatMessageControllerTest {
 
         var conditionA = new ComparisonPipelineAiResponse.ConditionResult(
                 buildAiProcessParams(leftParams),
-                leftResult,
-                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+                leftResult
         );
         var conditionB = new ComparisonPipelineAiResponse.ConditionResult(
                 buildAiProcessParams(rightParams),
-                rightResult,
-                new PredictPipelineResponse.Explanation("비교 예측", java.util.List.of())
+                rightResult
         );
-        return new ComparisonPipelineAiResponse("cmp-dynamic", "ETCH", conditionA, conditionB);
+        return new ComparisonPipelineAiResponse("cmp-dynamic", "ETCH", conditionA, conditionB,
+                new PredictPipelineResponse.Explanation("비교 예측", java.util.Map.of()));
     }
 
     private ComparisonPipelineAiResponse.ProcessParams buildAiProcessParams(java.util.Map<String, Double> params) {

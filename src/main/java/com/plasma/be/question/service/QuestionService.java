@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -85,12 +86,19 @@ public class QuestionService {
             history.add(Map.of("role", "user", "content", prior.getInputText()));
 
             snapshotRepository.findByMessageMessageIdAndConfirmedTrue(prior.getMessageId()).stream()
-                    .findFirst()
-                    .map(MessageValidationSnapshot::getPredictionExplanationSummary)
+                    .max(Comparator.comparingInt(MessageValidationSnapshot::getAttemptNo))
+                    .map(this::resolveAssistantHistoryContent)
                     .filter(StringUtils::hasText)
-                    .ifPresent(summary -> history.add(Map.of("role", "assistant", "content", summary)));
+                    .ifPresent(content -> history.add(Map.of("role", "assistant", "content", content)));
         }
         return history;
+    }
+
+    private String resolveAssistantHistoryContent(MessageValidationSnapshot snapshot) {
+        if ("QUESTION".equals(snapshot.getTaskType()) && StringUtils.hasText(snapshot.getQuestionAnswerText())) {
+            return snapshot.getQuestionAnswerText();
+        }
+        return snapshot.getPredictionExplanationSummary();
     }
 
     private String normalize(String input) {

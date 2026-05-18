@@ -128,9 +128,10 @@ public class ChatWorkflowService {
                 .orElseThrow(() -> new NoSuchElementException("validationId is not associated with the message."));
 
         String taskType = resolveTaskType(validation.taskType(), requestedTaskType);
+        List<Map<String, String>> history = extractService.buildHistory(message);
         if ("COMPARISON".equals(taskType)) {
             try {
-                ComparisonResponse comparison = comparisonService.compare(message, validation);
+                ComparisonResponse comparison = comparisonService.compare(message, validation, history);
                 String summary = buildComparisonSummary(comparison);
                 if (summary != null) {
                     extractService.storeAssistantSummary(messageId, validation.validationId(), summary);
@@ -142,8 +143,8 @@ public class ChatWorkflowService {
         }
         if ("OPTIMIZATION".equals(taskType)) {
             try {
-                PredictPipelineResponse currentPrediction = runPredictPipeline(message, validation);
-                OptimizePipelineResponse optimizeResult = runOptimizePipeline(message, validation);
+                PredictPipelineResponse currentPrediction = runPredictPipeline(message, validation, history);
+                OptimizePipelineResponse optimizeResult = runOptimizePipeline(message, validation, history);
                 ConfirmOptimizationResponse optimization = toConfirmOptimizationResponse(
                         optimizeResult, validation, currentPrediction);
                 String summary = buildOptimizationSummary(optimizeResult);
@@ -157,11 +158,16 @@ public class ChatWorkflowService {
         }
         if ("QUESTION".equals(taskType)) {
             try {
-                QuestionAnswerResponse question = questionService.answer(message);
-                if (question != null && StringUtils.hasText(question.answerText())) {
-                    extractService.storeAssistantSummary(messageId, validation.validationId(), question.answerText());
+                QuestionAnswerResponse storedQuestion = extractService.findStoredQuestion(messageId, validation.validationId())
+                        .orElse(null);
+                if (storedQuestion != null) {
+                    return new ConfirmResponse(validation, null, null, null, null, storedQuestion, null, null);
                 }
-                return new ConfirmResponse(validation, null, null, null, null, question, null, null);
+
+                QuestionAnswerResponse question = questionService.answer(message);
+                ParameterValidationResponse updatedValidation =
+                        extractService.storeQuestionOutcome(messageId, validation.validationId(), question);
+                return new ConfirmResponse(updatedValidation, null, null, null, null, question, null, null);
             } catch (RestClientException e) {
                 return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
             }
@@ -177,7 +183,7 @@ public class ChatWorkflowService {
         }
 
         try {
-            PredictPipelineResponse prediction = runPredictPipeline(message, validation);
+            PredictPipelineResponse prediction = runPredictPipeline(message, validation, history);
             PlasmaDistributionResponse plasmaDistribution = fetchPlasmaDistribution(validation);
             ParameterValidationResponse updatedValidation =
                     extractService.storePredictionOutcome(messageId, validationId, prediction, null);
@@ -236,7 +242,8 @@ public class ChatWorkflowService {
     }
 
     private PredictPipelineResponse runPredictPipeline(ChatMessage message,
-                                                       ParameterValidationResponse validation) {
+                                                       ParameterValidationResponse validation,
+                                                       List<Map<String, String>> history) {
         Map<String, Double> paramValues = validation.parameters().stream()
                 .filter(p -> p.value() != null)
                 .collect(Collectors.toMap(ParameterFieldResponse::key, ParameterFieldResponse::value));
@@ -253,12 +260,14 @@ public class ChatWorkflowService {
                 normalizedProcessType,
                 paramValues,
                 paramUnits,
-                message.getInputText()
+                message.getInputText(),
+                history
         );
     }
 
     private OptimizePipelineResponse runOptimizePipeline(ChatMessage message,
-                                                         ParameterValidationResponse validation) {
+                                                         ParameterValidationResponse validation,
+                                                         List<Map<String, String>> history) {
         Map<String, Object> processParams = new LinkedHashMap<>();
         for (ParameterFieldResponse parameter : validation.parameters()) {
             processParams.put(parameter.key(), Map.of(
@@ -267,21 +276,11 @@ public class ChatWorkflowService {
             ));
         }
 
-        Map<String, Object> currentOutputs = null;
-        if (validation.currentEr() != null && validation.currentEr().value() != null) {
-            currentOutputs = Map.of(
-                    "etch_rate", Map.of(
-                            "value", validation.currentEr().value(),
-                            "unit", validation.currentEr().unit() == null ? "" : validation.currentEr().unit()
-                    )
-            );
-        }
-
         return optimizeClient.requestOptimizePipeline(new OptimizeRequest(
                 message.getInputText(),
                 validation.processType() != null ? validation.processType() : "ETCH",
                 processParams,
-                currentOutputs
+                history
         ));
     }
 
