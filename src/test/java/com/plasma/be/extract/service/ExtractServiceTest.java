@@ -4,6 +4,7 @@ import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.entity.Session;
 import com.plasma.be.chat.repository.ChatMessageRepository;
+import com.plasma.be.chat.service.ValidationHistoryFormatter;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.dto.ParameterInputRequest;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestClientException;
 
@@ -45,6 +47,9 @@ class ExtractServiceTest {
 
     @Mock
     private MessageValidationSnapshotRepository snapshotRepository;
+
+    @Spy
+    private ValidationHistoryFormatter validationHistoryFormatter;
 
     @InjectMocks
     private ExtractService extractService;
@@ -306,7 +311,7 @@ class ExtractServiceTest {
         when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
         when(chatMessageRepository.findBySessionSessionIdAndMessageIdLessThanOrderByCreatedAtAsc(anyString(), any()))
                 .thenReturn(List.of(priorMessage));
-        when(snapshotRepository.findByMessageMessageIdAndConfirmedTrue(any()))
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(any()))
                 .thenReturn(List.of(confirmedSnapshot));
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -318,7 +323,7 @@ class ExtractServiceTest {
                 && "user".equals(history.get(0).get("role"))
                 && "pressure 5mTorr 예측해줘".equals(history.get(0).get("content"))
                 && "assistant".equals(history.get(1).get("role"))
-                && "etch score 75.0 point 수준으로 예측됩니다.".equals(history.get(1).get("content"))
+                && history.get(1).get("content").contains("etch score 75.0 point 수준으로 예측됩니다.")
         ));
     }
 
@@ -347,7 +352,7 @@ class ExtractServiceTest {
         when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
         when(chatMessageRepository.findBySessionSessionIdAndMessageIdLessThanOrderByCreatedAtAsc(anyString(), any()))
                 .thenReturn(List.of(priorMessage));
-        when(snapshotRepository.findByMessageMessageIdAndConfirmedTrue(any()))
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(any()))
                 .thenReturn(List.of());
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));

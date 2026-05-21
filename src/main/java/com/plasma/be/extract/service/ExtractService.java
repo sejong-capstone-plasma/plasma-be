@@ -3,6 +3,7 @@ package com.plasma.be.extract.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.plasma.be.chat.service.ValidationHistoryFormatter;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.repository.ChatMessageRepository;
@@ -57,14 +58,17 @@ public class ExtractService {
     private final ExtractClient extractClient;
     private final ChatMessageRepository chatMessageRepository;
     private final MessageValidationSnapshotRepository snapshotRepository;
+    private final ValidationHistoryFormatter validationHistoryFormatter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ExtractService(ExtractClient extractClient,
                           ChatMessageRepository chatMessageRepository,
-                          MessageValidationSnapshotRepository snapshotRepository) {
+                          MessageValidationSnapshotRepository snapshotRepository,
+                          ValidationHistoryFormatter validationHistoryFormatter) {
         this.extractClient = extractClient;
         this.chatMessageRepository = chatMessageRepository;
         this.snapshotRepository = snapshotRepository;
+        this.validationHistoryFormatter = validationHistoryFormatter;
     }
 
     // 저장된 사용자 메시지에서 초기 파라미터 추출을 수행하고 검증 스냅샷을 저장한다.
@@ -351,20 +355,13 @@ public class ExtractService {
             }
             history.add(Map.of("role", "user", "content", prior.getInputText()));
 
-            snapshotRepository.findByMessageMessageIdAndConfirmedTrue(prior.getMessageId()).stream()
-                    .max(java.util.Comparator.comparingInt(MessageValidationSnapshot::getAttemptNo))
-                    .map(this::resolveAssistantHistoryContent)
+            validationHistoryFormatter.selectLatestReusableSnapshot(
+                            snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(prior.getMessageId()))
+                    .map(validationHistoryFormatter::format)
                     .filter(StringUtils::hasText)
                     .ifPresent(content -> history.add(Map.of("role", "assistant", "content", content)));
         }
         return history;
-    }
-
-    private String resolveAssistantHistoryContent(MessageValidationSnapshot snapshot) {
-        if ("QUESTION".equals(snapshot.getTaskType()) && StringUtils.hasText(snapshot.getQuestionAnswerText())) {
-            return snapshot.getQuestionAnswerText();
-        }
-        return snapshot.getPredictionExplanationSummary();
     }
 
     MessageValidationSnapshot createSnapshot(ChatMessage message,
