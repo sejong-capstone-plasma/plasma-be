@@ -4,6 +4,7 @@ import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.entity.Session;
 import com.plasma.be.chat.repository.ChatMessageRepository;
+import com.plasma.be.chat.service.ValidationHistoryFormatter;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.dto.ParameterInputRequest;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestClientException;
 
@@ -45,6 +47,9 @@ class ExtractServiceTest {
 
     @Mock
     private MessageValidationSnapshotRepository snapshotRepository;
+
+    @Spy
+    private ValidationHistoryFormatter validationHistoryFormatter;
 
     @InjectMocks
     private ExtractService extractService;
@@ -306,7 +311,7 @@ class ExtractServiceTest {
         when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
         when(chatMessageRepository.findBySessionSessionIdAndMessageIdLessThanOrderByCreatedAtAsc(anyString(), any()))
                 .thenReturn(List.of(priorMessage));
-        when(snapshotRepository.findByMessageMessageIdAndConfirmedTrue(any()))
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(any()))
                 .thenReturn(List.of(confirmedSnapshot));
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -318,7 +323,43 @@ class ExtractServiceTest {
                 && "user".equals(history.get(0).get("role"))
                 && "pressure 5mTorr 예측해줘".equals(history.get(0).get("content"))
                 && "assistant".equals(history.get(1).get("role"))
-                && "etch score 75.0 point 수준으로 예측됩니다.".equals(history.get(1).get("content"))
+                && history.get(1).get("content").contains("etch score 75.0 point 수준으로 예측됩니다.")
+        ));
+    }
+
+    @Test
+    void extractFromMessage_이전_확정된_메시지에_detailsJson이_있으면_history_content에_포함한다() {
+        ChatMessage currentMessage = dummyChatMessage();
+        ChatMessage priorMessage = new ChatMessage(
+                Session.create("session-001", "browser-001", "테스트 세션", LocalDateTime.now()),
+                MessageRole.USER, "pressure 5mTorr 예측해줘", LocalDateTime.now()
+        );
+        String detailsJson = "{\"prediction_result\":{\"etch_score\":{\"value\":75.0,\"unit\":\"point\"}}}";
+        MessageValidationSnapshot confirmedSnapshot = MessageValidationSnapshot.create(
+                priorMessage, "req-prior", 1, "AI_EXTRACT", "VALID",
+                "ETCH", "PREDICTION", null, null, null, null, LocalDateTime.now()
+        );
+        confirmedSnapshot.storePrediction(
+                "predict-prior", "ETCH", null, null, null, null, 75.0, "point",
+                "etch score 75.0 point 수준으로 예측됩니다.", detailsJson, null
+        );
+        confirmedSnapshot.markConfirmed();
+
+        when(chatMessageRepository.findById(anyLong())).thenReturn(Optional.of(currentMessage));
+        when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
+        when(chatMessageRepository.findBySessionSessionIdAndMessageIdLessThanOrderByCreatedAtAsc(anyString(), any()))
+                .thenReturn(List.of(priorMessage));
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(any()))
+                .thenReturn(List.of(confirmedSnapshot));
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        extractService.extractFromMessage(1L);
+
+        verify(extractClient).requestExtraction(anyString(), argThat(history ->
+                history.size() == 2
+                && "assistant".equals(history.get(1).get("role"))
+                && history.get(1).get("content").contains(detailsJson)
         ));
     }
 
@@ -347,7 +388,7 @@ class ExtractServiceTest {
         when(snapshotRepository.findTopByMessageMessageIdOrderByAttemptNoDesc(anyLong())).thenReturn(Optional.empty());
         when(chatMessageRepository.findBySessionSessionIdAndMessageIdLessThanOrderByCreatedAtAsc(anyString(), any()))
                 .thenReturn(List.of(priorMessage));
-        when(snapshotRepository.findByMessageMessageIdAndConfirmedTrue(any()))
+        when(snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(any()))
                 .thenReturn(List.of());
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(validAiResponse());
         when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));

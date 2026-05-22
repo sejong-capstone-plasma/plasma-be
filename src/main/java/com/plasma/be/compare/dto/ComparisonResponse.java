@@ -10,7 +10,8 @@ public record ComparisonResponse(
         ConditionResult left,
         ConditionResult right,
         Difference difference,
-        String summary
+        String summary,
+        PredictPipelineResponse.Explanation explanation
 ) {
     public record ConditionResult(
             String label,

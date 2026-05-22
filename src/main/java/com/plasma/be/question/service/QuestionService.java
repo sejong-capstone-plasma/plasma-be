@@ -3,7 +3,7 @@ package com.plasma.be.question.service;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.repository.ChatMessageRepository;
-import com.plasma.be.extract.entity.MessageValidationSnapshot;
+import com.plasma.be.chat.service.ValidationHistoryFormatter;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
 import com.plasma.be.question.client.QuestionClient;
 import com.plasma.be.question.client.dto.QuestionAnswerResponse;
@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,13 +22,16 @@ public class QuestionService {
     private final QuestionClient questionClient;
     private final ChatMessageRepository chatMessageRepository;
     private final MessageValidationSnapshotRepository snapshotRepository;
+    private final ValidationHistoryFormatter validationHistoryFormatter;
 
     public QuestionService(QuestionClient questionClient,
                            ChatMessageRepository chatMessageRepository,
-                           MessageValidationSnapshotRepository snapshotRepository) {
+                           MessageValidationSnapshotRepository snapshotRepository,
+                           ValidationHistoryFormatter validationHistoryFormatter) {
         this.questionClient = questionClient;
         this.chatMessageRepository = chatMessageRepository;
         this.snapshotRepository = snapshotRepository;
+        this.validationHistoryFormatter = validationHistoryFormatter;
     }
 
     public QuestionAnswerResponse answer(ChatMessage message) {
@@ -85,20 +87,13 @@ public class QuestionService {
             }
             history.add(Map.of("role", "user", "content", prior.getInputText()));
 
-            snapshotRepository.findByMessageMessageIdAndConfirmedTrue(prior.getMessageId()).stream()
-                    .max(Comparator.comparingInt(MessageValidationSnapshot::getAttemptNo))
-                    .map(this::resolveAssistantHistoryContent)
+            validationHistoryFormatter.selectLatestReusableSnapshot(
+                            snapshotRepository.findByMessageMessageIdOrderByAttemptNoAsc(prior.getMessageId()))
+                    .map(validationHistoryFormatter::format)
                     .filter(StringUtils::hasText)
                     .ifPresent(content -> history.add(Map.of("role", "assistant", "content", content)));
         }
         return history;
-    }
-
-    private String resolveAssistantHistoryContent(MessageValidationSnapshot snapshot) {
-        if ("QUESTION".equals(snapshot.getTaskType()) && StringUtils.hasText(snapshot.getQuestionAnswerText())) {
-            return snapshot.getQuestionAnswerText();
-        }
-        return snapshot.getPredictionExplanationSummary();
     }
 
     private String normalize(String input) {

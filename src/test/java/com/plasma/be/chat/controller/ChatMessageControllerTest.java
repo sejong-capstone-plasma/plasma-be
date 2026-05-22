@@ -32,6 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -226,6 +227,70 @@ class ChatMessageControllerTest {
     }
 
     @Test
+    void 누락값을_보정하면_confirm전이어도_후속_메시지_히스토리에_보정조건이_포함된다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any()))
+                .thenReturn(invalidAiResponse(), validAiResponse());
+        when(extractClient.requestValidation(any(), any(), any(), any())).thenReturn(validAiResponse());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-history-after-correction",
+                                  "inputText": "압력은 모르겠고 소스 파워 500W, 바이어스 파워 100W로 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations", messageId)
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "parameters": [
+                                    { "key": "pressure", "value": 10.0, "unit": "mTorr" },
+                                    { "key": "source_power", "value": 500.0, "unit": "W" },
+                                    { "key": "bias_power", "value": 100.0, "unit": "W" }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allValid").value(true));
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-history-after-correction",
+                                  "inputText": "위 조건에서 source power를 450W로 내리고 다시 예측해줘"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Map<String, String>>> historyCaptor = ArgumentCaptor.forClass((Class) List.class);
+        verify(extractClient, times(2)).requestExtraction(anyString(), historyCaptor.capture());
+
+        List<Map<String, String>> followUpHistory = historyCaptor.getAllValues().get(1);
+        assertThat(followUpHistory).hasSize(2);
+        assertThat(followUpHistory.get(0)).containsEntry("role", "user");
+        assertThat(followUpHistory.get(0).get("content")).contains("소스 파워 500W");
+        assertThat(followUpHistory.get(1)).containsEntry("role", "assistant");
+        assertThat(followUpHistory.get(1).get("content"))
+                .contains("pressure=10.0 mTorr")
+                .contains("source_power=500.0 W")
+                .contains("bias_power=100.0 W");
+    }
+
+    @Test
     void confirm후_예측결과가_저장되어_조회응답에도_포함된다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
 
@@ -334,6 +399,7 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
                 .andExpect(jsonPath("$.optimization.candidates[0].prediction_result.etch_score.value").value(9.1))
                 .andExpect(jsonPath("$.optimization.candidates[0].plasmaDistribution.avg_energy").value(45.6))
+                .andExpect(jsonPath("$.optimization.explanation.summary").value("최적화 완료"))
                 .andExpect(jsonPath("$.prediction").isEmpty());
     }
 
@@ -603,6 +669,7 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
                 .andExpect(jsonPath("$.optimization.candidates[0].plasmaDistribution.ion_flux").value(2.34))
                 .andExpect(jsonPath("$.optimization.candidates[2].candidate_id").value(1))
+                .andExpect(jsonPath("$.optimization.explanation.summary").value("최적화 완료"))
                 .andExpect(jsonPath("$.prediction").isEmpty())
                 .andExpect(jsonPath("$.comparison").isEmpty());
     }
@@ -643,7 +710,8 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
                 .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(6.0))
                 .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(400.0))
-                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(606.0));
+                .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(606.0))
+                .andExpect(jsonPath("$.comparison.explanation.summary").value("비교 예측"));
     }
 
     @Test
@@ -958,7 +1026,8 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(400.0))
                 .andExpect(jsonPath("$.comparison.right.label").value("right"))
                 .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
-                .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0));
+                .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0))
+                .andExpect(jsonPath("$.comparison.explanation.summary").value("비교 예측"));
     }
 
     @Test
