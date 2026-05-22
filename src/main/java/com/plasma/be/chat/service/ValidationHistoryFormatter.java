@@ -46,6 +46,11 @@ public class ValidationHistoryFormatter {
             sections.add(predictionSummary);
         }
 
+        String detailsJson = snapshot.getPredictionExplanationDetailsJson();
+        if (StringUtils.hasText(detailsJson) && !"{}".equals(detailsJson.trim())) {
+            sections.add(detailsJson);
+        }
+
         if (sections.isEmpty() && StringUtils.hasText(snapshot.getQuestionAnswerText())) {
             sections.add(snapshot.getQuestionAnswerText().trim());
         }
