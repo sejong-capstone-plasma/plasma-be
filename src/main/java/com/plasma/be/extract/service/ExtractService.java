@@ -20,6 +20,8 @@ import com.plasma.be.extract.entity.MessageValidationSnapshot;
 import com.plasma.be.extract.repository.MessageValidationSnapshotRepository;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import com.plasma.be.question.client.dto.QuestionAnswerResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -39,6 +41,9 @@ import java.util.stream.Collectors;
 
 @Service
 public class ExtractService {
+
+    private static final Logger log = LoggerFactory.getLogger(ExtractService.class);
+    private static final int MAX_STORED_SNAPSHOT_JSON_LENGTH = 60_000;
 
     private static final List<ParameterDefinition> SUPPORTED_PARAMETERS = List.of(
             new ParameterDefinition("pressure", "Pressure", "mTorr", 0, 2.0, 10.0),
@@ -345,7 +350,7 @@ public class ExtractService {
                                                                 ConfirmOptimizationResponse optimization) {
         MessageValidationSnapshot snapshot = snapshotRepository.findByValidationIdAndMessageMessageId(validationId, messageId)
                 .orElseThrow(() -> new IllegalArgumentException("validationId is not associated with the message."));
-        snapshot.storeOptimizationResult(writeJson(optimization));
+        snapshot.storeOptimizationResult(compactSnapshotJson(writeJson(optimization), "optimization", validationId));
         return toResponse(snapshot);
     }
 
@@ -355,7 +360,7 @@ public class ExtractService {
                                                               ComparisonResponse comparison) {
         MessageValidationSnapshot snapshot = snapshotRepository.findByValidationIdAndMessageMessageId(validationId, messageId)
                 .orElseThrow(() -> new IllegalArgumentException("validationId is not associated with the message."));
-        snapshot.storeComparisonResult(writeJson(comparison));
+        snapshot.storeComparisonResult(compactSnapshotJson(writeJson(comparison), "comparison", validationId));
         return toResponse(snapshot);
     }
 
@@ -633,6 +638,18 @@ public class ExtractService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to serialize snapshot payload.", exception);
         }
+    }
+
+    private String compactSnapshotJson(String json, String payloadType, Long validationId) {
+        if (!StringUtils.hasText(json)) {
+            return null;
+        }
+        if (json.length() <= MAX_STORED_SNAPSHOT_JSON_LENGTH) {
+            return json;
+        }
+        log.warn("Skip storing {} snapshot for validationId={} because payload is too large: {} chars",
+                payloadType, validationId, json.length());
+        return null;
     }
 
     private String writeObjectList(List<Object> values) {
