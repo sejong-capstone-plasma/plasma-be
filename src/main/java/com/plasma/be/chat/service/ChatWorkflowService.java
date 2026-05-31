@@ -132,13 +132,15 @@ public class ChatWorkflowService {
         if ("COMPARISON".equals(taskType)) {
             try {
                 ComparisonResponse comparison = comparisonService.compare(message, validation, history);
+                ParameterValidationResponse updatedValidation =
+                        extractService.storeComparisonOutcome(messageId, validation.validationId(), comparison);
                 String summary = buildComparisonSummary(comparison);
                 if (summary != null) {
                     extractService.storeAssistantSummary(messageId, validation.validationId(), summary);
                 }
-                return new ConfirmResponse(validation, null, null, null, comparison, null, null, null);
+                return new ConfirmResponse(updatedValidation, message.getInputText(), null, null, null, comparison, null, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, message.getInputText(), null, null, null, null, null, null, e.getMessage());
             }
         }
         if ("OPTIMIZATION".equals(taskType)) {
@@ -147,13 +149,15 @@ public class ChatWorkflowService {
                 OptimizePipelineResponse optimizeResult = runOptimizePipeline(message, validation, history);
                 ConfirmOptimizationResponse optimization = toConfirmOptimizationResponse(
                         optimizeResult, validation, currentPrediction);
+                ParameterValidationResponse updatedValidation =
+                        extractService.storeOptimizationOutcome(messageId, validation.validationId(), optimization);
                 String summary = buildOptimizationSummary(optimizeResult);
                 if (summary != null) {
                     extractService.storeAssistantSummary(messageId, validation.validationId(), summary);
                 }
-                return new ConfirmResponse(validation, null, null, optimization, null, null, null, null);
+                return new ConfirmResponse(updatedValidation, message.getInputText(), null, null, optimization, null, null, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, message.getInputText(), null, null, null, null, null, null, e.getMessage());
             }
         }
         if ("QUESTION".equals(taskType)) {
@@ -161,25 +165,25 @@ public class ChatWorkflowService {
                 QuestionAnswerResponse storedQuestion = extractService.findStoredQuestion(messageId, validation.validationId())
                         .orElse(null);
                 if (storedQuestion != null) {
-                    return new ConfirmResponse(validation, null, null, null, null, storedQuestion, null, null);
+                    return new ConfirmResponse(validation, message.getInputText(), null, null, null, null, storedQuestion, null, null);
                 }
 
                 QuestionAnswerResponse question = questionService.answer(message);
                 ParameterValidationResponse updatedValidation =
                         extractService.storeQuestionOutcome(messageId, validation.validationId(), question);
-                return new ConfirmResponse(updatedValidation, null, null, null, null, question, null, null);
+                return new ConfirmResponse(updatedValidation, message.getInputText(), null, null, null, null, question, null, null);
             } catch (RestClientException e) {
-                return new ConfirmResponse(validation, null, null, null, null, null, null, e.getMessage());
+                return new ConfirmResponse(validation, message.getInputText(), null, null, null, null, null, null, e.getMessage());
             }
         }
         if ("UNSUPPORTED".equals(taskType)) {
-            return new ConfirmResponse(validation, null, null, null, null, null, null, null);
+            return new ConfirmResponse(validation, message.getInputText(), null, null, null, null, null, null, null);
         }
         if (!StringUtils.hasText(taskType)) {
             throw new IllegalArgumentException("requestedTaskType is required when taskType is not inferred.");
         }
         if (!"PREDICTION".equals(taskType)) {
-            return new ConfirmResponse(validation, null, null, null, null, null, null, null);
+            return new ConfirmResponse(validation, message.getInputText(), null, null, null, null, null, null, null);
         }
 
         try {
@@ -187,11 +191,11 @@ public class ChatWorkflowService {
             PlasmaDistributionResponse plasmaDistribution = fetchPlasmaDistribution(validation);
             ParameterValidationResponse updatedValidation =
                     extractService.storePredictionOutcome(messageId, validationId, prediction, null);
-            return new ConfirmResponse(updatedValidation, prediction, plasmaDistribution, null, null, null, null, null);
+            return new ConfirmResponse(updatedValidation, message.getInputText(), prediction, plasmaDistribution, null, null, null, null, null);
         } catch (RestClientException e) {
             ParameterValidationResponse updatedValidation =
                     extractService.storePredictionOutcome(messageId, validationId, null, e.getMessage());
-            return new ConfirmResponse(updatedValidation, null, null, null, null, null, e.getMessage(), e.getMessage());
+            return new ConfirmResponse(updatedValidation, message.getInputText(), null, null, null, null, null, e.getMessage(), e.getMessage());
         }
     }
 

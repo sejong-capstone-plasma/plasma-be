@@ -77,7 +77,7 @@ public class ComparisonService {
                 history
         );
 
-        return buildResponse(aiResponse, left, right, processType);
+        return buildResponse(aiResponse, left, right, processType, message.getInputText());
     }
 
     private ParsedComparison parseFromExtract(ParameterValidationResponse validation) {
@@ -135,11 +135,13 @@ public class ComparisonService {
     private ComparisonResponse buildResponse(ComparisonPipelineAiResponse ai,
                                              Condition left,
                                              Condition right,
-                                             String processType) {
+                                             String processType,
+                                             String originalInputText) {
         PredictPipelineResponse leftPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionA());
         PredictPipelineResponse rightPrediction = toPredictResponse(ai, ai == null ? null : ai.conditionB());
         String summary = (ai != null && ai.explanation() != null) ? ai.explanation().summary() : null;
         return new ComparisonResponse(
+                originalInputText,
                 buildConditionResult(left, processType, leftPrediction, fetchPlasmaDistribution(left)),
                 buildConditionResult(right, processType, rightPrediction, fetchPlasmaDistribution(right)),
                 calculateDifference(leftPrediction, rightPrediction),

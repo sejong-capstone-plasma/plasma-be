@@ -1,5 +1,7 @@
 package com.plasma.be.extract.dto;
 
+import com.plasma.be.chat.dto.ConfirmOptimizationResponse;
+import com.plasma.be.compare.dto.ComparisonResponse;
 import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 
 import java.time.LocalDateTime;
@@ -21,6 +23,8 @@ public record ParameterValidationResponse(
         boolean allValid,
         boolean confirmed,
         PredictPipelineResponse prediction,
+        ConfirmOptimizationResponse optimization,
+        ComparisonResponse comparison,
         String predictionError,
         String failureReason,
         LocalDateTime createdAt

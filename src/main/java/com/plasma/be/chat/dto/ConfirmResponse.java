@@ -8,6 +8,7 @@ import com.plasma.be.question.client.dto.QuestionAnswerResponse;
 
 public record ConfirmResponse(
         ParameterValidationResponse validation,
+        String inputText,
         PredictPipelineResponse prediction,
         PlasmaDistributionResponse plasmaDistribution,
         ConfirmOptimizationResponse optimization,

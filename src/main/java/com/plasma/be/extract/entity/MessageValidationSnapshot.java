@@ -129,6 +129,12 @@ public class MessageValidationSnapshot {
     @Column(name = "question_references_json", columnDefinition = "TEXT")
     private String questionReferencesJson;
 
+    @Column(name = "optimization_result_json", columnDefinition = "TEXT")
+    private String optimizationResultJson;
+
+    @Column(name = "comparison_result_json", columnDefinition = "TEXT")
+    private String comparisonResultJson;
+
     // 이 검증 결과가 저장된 시각이다.
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -282,6 +288,14 @@ public class MessageValidationSnapshot {
         this.predictionExplanationSummary = answerText;
     }
 
+    public void storeOptimizationResult(String optimizationResultJson) {
+        this.optimizationResultJson = optimizationResultJson;
+    }
+
+    public void storeComparisonResult(String comparisonResultJson) {
+        this.comparisonResultJson = comparisonResultJson;
+    }
+
     public void storeComparisonConditions(String conditionAJson, String conditionBJson) {
         this.conditionAJson = conditionAJson;
         this.conditionBJson = conditionBJson;
@@ -377,6 +391,14 @@ public class MessageValidationSnapshot {
 
     public String getQuestionReferencesJson() {
         return questionReferencesJson;
+    }
+
+    public String getOptimizationResultJson() {
+        return optimizationResultJson;
+    }
+
+    public String getComparisonResultJson() {
+        return comparisonResultJson;
     }
 
     public LocalDateTime getCreatedAt() {

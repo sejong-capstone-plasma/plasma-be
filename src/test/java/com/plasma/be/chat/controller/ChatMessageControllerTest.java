@@ -664,6 +664,7 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validation.optimization.current.process_params.bias_power.value").value(100.0))
                 .andExpect(jsonPath("$.optimization.current.process_params.bias_power.value").value(100.0))
                 .andExpect(jsonPath("$.optimization.current.plasmaDistribution.matched_pressure").value(10.0))
                 .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(2))
@@ -672,6 +673,12 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.optimization.explanation.summary").value("최적화 완료"))
                 .andExpect(jsonPath("$.prediction").isEmpty())
                 .andExpect(jsonPath("$.comparison").isEmpty());
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-optimization").session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].validations[0].optimization.current.process_params.bias_power.value").value(100.0))
+                .andExpect(jsonPath("$[0].validations[0].optimization.candidates[0].candidate_id").value(2))
+                .andExpect(jsonPath("$[0].validations[0].optimization.explanation.summary").value("최적화 완료"));
     }
 
     @Test
@@ -694,8 +701,14 @@ class ChatMessageControllerTest {
                 .andExpect(jsonPath("$.validations[0].validationStatus").value("VALID"))
                 .andExpect(jsonPath("$.validations[0].allValid").value(true))
                 .andExpect(jsonPath("$.validations[0].parameters.length()").value(0))
+                .andExpect(jsonPath("$.validations[0].conditionA.parameters.length()").value(3))
                 .andExpect(jsonPath("$.validations[0].conditionA.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$.validations[0].conditionA.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.validations[0].conditionA.parameters[2].value").value(200.0))
+                .andExpect(jsonPath("$.validations[0].conditionB.parameters.length()").value(3))
                 .andExpect(jsonPath("$.validations[0].conditionB.parameters[0].value").value(6.0))
+                .andExpect(jsonPath("$.validations[0].conditionB.parameters[1].value").value(200.0))
+                .andExpect(jsonPath("$.validations[0].conditionB.parameters[2].value").value(400.0))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -706,12 +719,29 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inputText").value("압력 10 소스 파워 500 바이어스 파워 200 일 때랑 압력 5 소스 파워 200 바이어스 파워 400일 때를 비교해줘."))
+                .andExpect(jsonPath("$.validation.comparison.originalInputText").value("압력 10 소스 파워 500 바이어스 파워 200 일 때랑 압력 5 소스 파워 200 바이어스 파워 400일 때를 비교해줘."))
+                .andExpect(jsonPath("$.comparison.originalInputText").value("압력 10 소스 파워 500 바이어스 파워 200 일 때랑 압력 5 소스 파워 200 바이어스 파워 400일 때를 비교해줘."))
+                .andExpect(jsonPath("$.comparison.left.parameters.length()").value(3))
                 .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(10.0))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[2].value").value(200.0))
+                .andExpect(jsonPath("$.comparison.right.parameters.length()").value(3))
                 .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(6.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(200.0))
                 .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(400.0))
                 .andExpect(jsonPath("$.comparison.right.prediction.prediction_result.etch_score.value").value(606.0))
                 .andExpect(jsonPath("$.comparison.explanation.summary").value("비교 예측"));
+
+        mockMvc.perform(get("/api/chat/messages/sessions/session-compare-inline").session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].validations[0].comparison.originalInputText").value("압력 10 소스 파워 500 바이어스 파워 200 일 때랑 압력 5 소스 파워 200 바이어스 파워 400일 때를 비교해줘."))
+                .andExpect(jsonPath("$[0].validations[0].comparison.left.parameters[0].value").value(10.0))
+                .andExpect(jsonPath("$[0].validations[0].comparison.left.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$[0].validations[0].comparison.left.parameters[2].value").value(200.0))
+                .andExpect(jsonPath("$[0].validations[0].comparison.right.parameters[0].value").value(6.0))
+                .andExpect(jsonPath("$[0].validations[0].comparison.right.parameters[1].value").value(200.0))
+                .andExpect(jsonPath("$[0].validations[0].comparison.right.parameters[2].value").value(400.0));
     }
 
     @Test
@@ -1022,10 +1052,18 @@ class ChatMessageControllerTest {
         mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
                         .session(browserSession))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inputText").value("그 조건에서 소스파워가 100 높아졌을 때를 비교해줘."))
+                .andExpect(jsonPath("$.comparison.originalInputText").value("그 조건에서 소스파워가 100 높아졌을 때를 비교해줘."))
                 .andExpect(jsonPath("$.comparison.left.label").value("left"))
+                .andExpect(jsonPath("$.comparison.left.parameters.length()").value(3))
+                .andExpect(jsonPath("$.comparison.left.parameters[0].value").value(10.0))
                 .andExpect(jsonPath("$.comparison.left.parameters[1].value").value(400.0))
+                .andExpect(jsonPath("$.comparison.left.parameters[2].value").value(100.0))
                 .andExpect(jsonPath("$.comparison.right.label").value("right"))
+                .andExpect(jsonPath("$.comparison.right.parameters.length()").value(3))
+                .andExpect(jsonPath("$.comparison.right.parameters[0].value").value(10.0))
                 .andExpect(jsonPath("$.comparison.right.parameters[1].value").value(500.0))
+                .andExpect(jsonPath("$.comparison.right.parameters[2].value").value(100.0))
                 .andExpect(jsonPath("$.comparison.difference.etchScoreDelta").value(100.0))
                 .andExpect(jsonPath("$.comparison.explanation.summary").value("비교 예측"));
     }

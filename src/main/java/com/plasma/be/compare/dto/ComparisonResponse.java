@@ -7,6 +7,7 @@ import com.plasma.be.predict.client.dto.PredictPipelineResponse;
 import java.util.List;
 
 public record ComparisonResponse(
+        String originalInputText,
         ConditionResult left,
         ConditionResult right,
         Difference difference,

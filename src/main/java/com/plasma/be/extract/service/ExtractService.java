@@ -3,10 +3,12 @@ package com.plasma.be.extract.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.plasma.be.chat.dto.ConfirmOptimizationResponse;
 import com.plasma.be.chat.service.ValidationHistoryFormatter;
 import com.plasma.be.chat.entity.ChatMessage;
 import com.plasma.be.chat.entity.MessageRole;
 import com.plasma.be.chat.repository.ChatMessageRepository;
+import com.plasma.be.compare.dto.ComparisonResponse;
 import com.plasma.be.extract.client.ExtractClient;
 import com.plasma.be.extract.client.dto.ExtractedParameterData;
 import com.plasma.be.extract.dto.ParameterFieldResponse;
@@ -337,6 +339,26 @@ public class ExtractService {
         return toResponse(snapshot);
     }
 
+    @Transactional
+    public ParameterValidationResponse storeOptimizationOutcome(Long messageId,
+                                                                Long validationId,
+                                                                ConfirmOptimizationResponse optimization) {
+        MessageValidationSnapshot snapshot = snapshotRepository.findByValidationIdAndMessageMessageId(validationId, messageId)
+                .orElseThrow(() -> new IllegalArgumentException("validationId is not associated with the message."));
+        snapshot.storeOptimizationResult(writeJson(optimization));
+        return toResponse(snapshot);
+    }
+
+    @Transactional
+    public ParameterValidationResponse storeComparisonOutcome(Long messageId,
+                                                              Long validationId,
+                                                              ComparisonResponse comparison) {
+        MessageValidationSnapshot snapshot = snapshotRepository.findByValidationIdAndMessageMessageId(validationId, messageId)
+                .orElseThrow(() -> new IllegalArgumentException("validationId is not associated with the message."));
+        snapshot.storeComparisonResult(writeJson(comparison));
+        return toResponse(snapshot);
+    }
+
     ExtractedParameterData requestToAiServer(String message, List<Map<String, String>> history) {
         return extractClient.requestExtraction(message, history);
     }
@@ -519,6 +541,8 @@ public class ExtractService {
                 snapshot.isAllValid() || areComparisonConditionsValid(snapshot),
                 snapshot.isConfirmed(),
                 buildPrediction(snapshot),
+                buildOptimization(snapshot),
+                buildComparison(snapshot),
                 snapshot.getPredictionError(),
                 snapshot.getFailureReason(),
                 snapshot.getCreatedAt()
@@ -566,6 +590,14 @@ public class ExtractService {
         return new PredictPipelineResponse.ValueWithUnit(value, unit);
     }
 
+    private ConfirmOptimizationResponse buildOptimization(MessageValidationSnapshot snapshot) {
+        return readJson(snapshot.getOptimizationResultJson(), ConfirmOptimizationResponse.class);
+    }
+
+    private ComparisonResponse buildComparison(MessageValidationSnapshot snapshot) {
+        return readJson(snapshot.getComparisonResultJson(), ComparisonResponse.class);
+    }
+
     private Double predictionValue(PredictPipelineResponse prediction,
                                    java.util.function.Function<PredictPipelineResponse.PredictionResult, PredictPipelineResponse.ValueWithUnit> selector) {
         if (prediction == null || prediction.predictionResult() == null) {
@@ -589,6 +621,17 @@ public class ExtractService {
             return objectMapper.writeValueAsString(details == null ? Map.of() : details);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to serialize explanation details.", exception);
+        }
+    }
+
+    private String writeJson(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize snapshot payload.", exception);
         }
     }
 
@@ -638,6 +681,17 @@ public class ExtractService {
             return objectMapper.readValue(detailsJson, MAP_TYPE);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to deserialize explanation details.", exception);
+        }
+    }
+
+    private <T> T readJson(String json, Class<T> type) {
+        if (!StringUtils.hasText(json)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, type);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to deserialize snapshot payload.", exception);
         }
     }
 
