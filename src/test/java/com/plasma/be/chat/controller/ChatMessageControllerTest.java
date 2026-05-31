@@ -682,6 +682,41 @@ class ChatMessageControllerTest {
     }
 
     @Test
+    void OPTIMIZATION_result가_비어도_프론트용_fallback_결과를_반환한다() throws Exception {
+        MockHttpSession browserSession = browserSession("browser-a");
+        when(extractClient.requestExtraction(anyString(), any())).thenReturn(optimizationAiResponse());
+        when(optimizeClient.requestOptimizePipeline(any())).thenReturn(optimizationResponseWithoutCandidates());
+
+        String body = mockMvc.perform(post("/api/chat/messages")
+                        .session(browserSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-optimization-fallback",
+                                  "inputText": "압력 10mTorr, 소스 파워 500W, 바이어스 파워 100W 조건에서 최적화해줘"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long messageId = JsonTestHelper.readLong(body, "messageId");
+        long validationId = JsonTestHelper.readLong(body, "validations[0].validationId");
+
+        mockMvc.perform(post("/api/chat/messages/{messageId}/validations/{validationId}/confirm", messageId, validationId)
+                        .session(browserSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.optimization.current.process_params.pressure.value").value(10.0))
+                .andExpect(jsonPath("$.optimization.current.prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.optimization.candidates.length()").value(1))
+                .andExpect(jsonPath("$.optimization.candidates[0].candidate_id").value(1))
+                .andExpect(jsonPath("$.optimization.candidates[0].process_params.pressure.value").value(10.0))
+                .andExpect(jsonPath("$.optimization.candidates[0].prediction_result.etch_score.value").value(7.89))
+                .andExpect(jsonPath("$.optimization.explanation.summary").value("최적화 후보 없음"));
+    }
+
+    @Test
     void confirm후_COMPARISON_직접_두조건을_비교할_수_있다() throws Exception {
         MockHttpSession browserSession = browserSession("browser-a");
         when(extractClient.requestExtraction(anyString(), any())).thenReturn(directComparisonAiResponse());
@@ -1471,6 +1506,14 @@ class ChatMessageControllerTest {
         var optimizationResult = new OptimizePipelineResponse.OptimizationResult(4, candidates);
         var explanation = new OptimizePipelineResponse.Explanation("최적화 완료", java.util.Map.of());
         return new OptimizePipelineResponse("req-opt-001", "ETCH", baselineOutputs, optimizationResult, explanation);
+    }
+
+    private OptimizePipelineResponse optimizationResponseWithoutCandidates() {
+        var baselineOutputs = new OptimizePipelineResponse.BaselineOutputs(
+                new OptimizePipelineResponse.ValueWithUnit(7.89, "score")
+        );
+        var explanation = new OptimizePipelineResponse.Explanation("최적화 후보 없음", java.util.Map.of());
+        return new OptimizePipelineResponse("req-opt-empty", "ETCH", baselineOutputs, null, explanation);
     }
 
     private OptimizePipelineResponse.OptimizationCandidate optimizationCandidate(int rank,

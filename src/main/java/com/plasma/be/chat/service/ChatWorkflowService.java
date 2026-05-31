@@ -293,7 +293,7 @@ public class ChatWorkflowService {
             ParameterValidationResponse validation,
             PredictPipelineResponse currentPrediction) {
 
-        if (optimization == null || optimization.optimizationResult() == null) {
+        if (optimization == null) {
             return null;
         }
 
@@ -303,22 +303,40 @@ public class ChatWorkflowService {
                 fetchPlasmaDistribution(validation)
         );
 
-        List<ConfirmOptimizationResponse.Candidate> candidates = optimization
-                .optimizationResult()
-                .optimizationCandidates()
-                .stream()
-                .sorted(Comparator.comparingDouble(this::candidateEtchScore).reversed())
-                .limit(MAX_OPTIMIZATION_CANDIDATES)
-                .map(c -> {
-                    ConfirmOptimizationResponse.ProcessParams params = toConfirmProcessParams(c.processParams());
-                    ConfirmOptimizationResponse.ParameterImpact impact =
-                            fetchParameterImpact(optimization.processType(), params);
-                    return new ConfirmOptimizationResponse.Candidate(
-                            (long) c.rank(), params, c.predictionResult(), impact, fetchPlasmaDistribution(params));
-                })
-                .toList();
+        List<ConfirmOptimizationResponse.Candidate> candidates = List.of();
+        if (optimization.optimizationResult() != null
+                && optimization.optimizationResult().optimizationCandidates() != null) {
+            candidates = optimization
+                    .optimizationResult()
+                    .optimizationCandidates()
+                    .stream()
+                    .sorted(Comparator.comparingDouble(this::candidateEtchScore).reversed())
+                    .limit(MAX_OPTIMIZATION_CANDIDATES)
+                    .map(c -> {
+                        ConfirmOptimizationResponse.ProcessParams params = toConfirmProcessParams(c.processParams());
+                        ConfirmOptimizationResponse.ParameterImpact impact =
+                                fetchParameterImpact(optimization.processType(), params);
+                        return new ConfirmOptimizationResponse.Candidate(
+                                (long) c.rank(), params, c.predictionResult(), impact, fetchPlasmaDistribution(params));
+                    })
+                    .toList();
+        }
+
+        if (candidates.isEmpty() && current.processParams() != null && current.predictionResult() != null) {
+            candidates = List.of(new ConfirmOptimizationResponse.Candidate(
+                    1L,
+                    current.processParams(),
+                    current.predictionResult(),
+                    emptyParameterImpact(),
+                    current.plasmaDistribution()
+            ));
+        }
 
         return new ConfirmOptimizationResponse(current, candidates, optimization.explanation());
+    }
+
+    private ConfirmOptimizationResponse.ParameterImpact emptyParameterImpact() {
+        return new ConfirmOptimizationResponse.ParameterImpact(List.of(), List.of(), List.of());
     }
 
     private ConfirmOptimizationResponse.ProcessParams buildProcessParams(ParameterValidationResponse validation) {
