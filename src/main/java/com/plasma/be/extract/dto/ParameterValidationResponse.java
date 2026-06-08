@@ -27,7 +27,8 @@ public record ParameterValidationResponse(
         ComparisonResponse comparison,
         String predictionError,
         String failureReason,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String assistantSummary
 ) {
     public record ComparisonConditionResponse(
             String label,

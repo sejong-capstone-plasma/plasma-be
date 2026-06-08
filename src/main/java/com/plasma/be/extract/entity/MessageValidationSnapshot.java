@@ -129,10 +129,10 @@ public class MessageValidationSnapshot {
     @Column(name = "question_references_json", columnDefinition = "TEXT")
     private String questionReferencesJson;
 
-    @Column(name = "optimization_result_json", columnDefinition = "TEXT")
+    @Column(name = "optimization_result_json", columnDefinition = "MEDIUMTEXT")
     private String optimizationResultJson;
 
-    @Column(name = "comparison_result_json", columnDefinition = "TEXT")
+    @Column(name = "comparison_result_json", columnDefinition = "MEDIUMTEXT")
     private String comparisonResultJson;
 
     // 이 검증 결과가 저장된 시각이다.

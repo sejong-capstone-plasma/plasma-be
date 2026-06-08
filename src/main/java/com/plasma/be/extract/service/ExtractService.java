@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
 public class ExtractService {
 
     private static final Logger log = LoggerFactory.getLogger(ExtractService.class);
-    private static final int MAX_STORED_SNAPSHOT_JSON_LENGTH = 60_000;
+    private static final int MAX_STORED_SNAPSHOT_JSON_LENGTH = 500_000;
 
     private static final List<ParameterDefinition> SUPPORTED_PARAMETERS = List.of(
             new ParameterDefinition("pressure", "Pressure", "mTorr", 0, 2.0, 10.0),
@@ -550,7 +550,8 @@ public class ExtractService {
                 buildComparison(snapshot),
                 snapshot.getPredictionError(),
                 snapshot.getFailureReason(),
-                snapshot.getCreatedAt()
+                snapshot.getCreatedAt(),
+                snapshot.getPredictionExplanationSummary()
         );
     }
 
